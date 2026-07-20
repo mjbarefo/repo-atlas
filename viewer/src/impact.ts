@@ -47,7 +47,9 @@ function project(
   parents: Map<string, string>,
 ): string | null {
   let current: string | undefined = nodeId;
-  while (current) {
+  const seen = new Set<string>();
+  while (current && !seen.has(current)) {
+    seen.add(current);
     if (visible.has(current)) {
       return current;
     }

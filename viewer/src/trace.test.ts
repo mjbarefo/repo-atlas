@@ -52,4 +52,26 @@ describe("trace projection", () => {
     );
     expect(overlay.provisionalNodeIds).toEqual(["file:src/new.py"]);
   });
+
+  it("marks unread dependents at aggregated zoom levels", () => {
+    const editOnly = [
+      {
+        ...trace.events[1],
+        node_id: "file:src/auth/store.py",
+      },
+    ];
+    const zoomedOut = traceOverlay(artifact, editOnly, ["comp:auth"]);
+    expect(zoomedOut.riskNodeIds).toEqual(new Set(["comp:auth"]));
+
+    const withDependentRead = [
+      ...editOnly,
+      {
+        ...trace.events[0],
+        node_id: "file:src/auth/session.py",
+      },
+    ];
+    expect(
+      traceOverlay(artifact, withDependentRead, ["comp:auth"]).riskNodeIds,
+    ).toEqual(new Set());
+  });
 });

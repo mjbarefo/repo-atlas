@@ -77,8 +77,8 @@ export function traceOverlay(
   const { componentByModule, moduleByFile } = hierarchy(artifact);
   const activity = new Map<string, NodeActivity>();
   const provisional = new Set<string>();
-  const readNodes = new Set<string>();
-  const editedNodes = new Set<string>();
+  const readFileIds = new Set<string>();
+  const editedFileIds = new Set<string>();
 
   for (const event of events) {
     if (!event.node_id) {
@@ -87,6 +87,11 @@ export function traceOverlay(
     if (!known.has(event.node_id)) {
       provisional.add(event.node_id);
       continue;
+    }
+    if (event.tool === "Edit" || event.tool === "Write") {
+      editedFileIds.add(event.node_id);
+    } else if (event.tool === "Read" || event.tool === "Grep") {
+      readFileIds.add(event.node_id);
     }
     const projected = projectNode(
       event.node_id,
@@ -100,24 +105,29 @@ export function traceOverlay(
     const current = activity.get(projected) ?? { edits: 0, reads: 0, total: 0 };
     if (event.tool === "Edit" || event.tool === "Write") {
       current.edits += 1;
-      editedNodes.add(projected);
     } else if (event.tool === "Read" || event.tool === "Grep") {
       current.reads += 1;
-      readNodes.add(projected);
     }
     current.total += 1;
     activity.set(projected, current);
   }
 
+  // Risk is decided at file granularity (map edges are file→file), then each
+  // risky dependent is projected up to the visible level; comparing raw edge
+  // endpoints against module/component ids would silently never match.
   const riskNodeIds = new Set<string>();
   for (const edge of artifact.edges) {
-    if (
-      visible.has(edge.source) &&
-      visible.has(edge.target) &&
-      editedNodes.has(edge.target) &&
-      !readNodes.has(edge.source)
-    ) {
-      riskNodeIds.add(edge.source);
+    if (!editedFileIds.has(edge.target) || readFileIds.has(edge.source)) {
+      continue;
+    }
+    const projected = projectNode(
+      edge.source,
+      visible,
+      moduleByFile,
+      componentByModule,
+    );
+    if (projected) {
+      riskNodeIds.add(projected);
     }
   }
   return {

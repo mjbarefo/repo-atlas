@@ -1,7 +1,8 @@
-import ELK, {
-  type ElkExtendedEdge,
-  type ElkNode,
-} from "elkjs/lib/elk.bundled.js";
+import type {
+  ELK as ElkInstance,
+  ElkExtendedEdge,
+  ElkNode,
+} from "elkjs/lib/elk-api";
 import type {
   Edge,
   MapArtifact,
@@ -36,9 +37,31 @@ export interface ViewTransform {
   scale: number;
 }
 
-const elk = new ELK();
 const NODE_WIDTH = 220;
 const NODE_HEIGHT = 88;
+
+let elkPromise: Promise<ElkInstance> | null = null;
+
+async function loadElk(): Promise<ElkInstance> {
+  // In browsers, run the layered algorithm inside a real Web Worker so large
+  // layouts cannot freeze the UI; ELK's default (no workerUrl) executes the
+  // whole algorithm synchronously on the calling thread. The dynamic imports
+  // also keep ELK out of the initial bundle.
+  if (typeof Worker === "function") {
+    const [{ default: Elk }, { default: workerUrl }] = await Promise.all([
+      import("elkjs/lib/elk-api"),
+      import("elkjs/lib/elk-worker.min.js?url"),
+    ]);
+    return new Elk({ workerUrl });
+  }
+  const { default: Elk } = await import("elkjs/lib/elk.bundled.js");
+  return new Elk();
+}
+
+function elk(): Promise<ElkInstance> {
+  elkPromise ??= loadElk();
+  return elkPromise;
+}
 
 export function fitGraphTransform(
   layoutWidth: number,
@@ -108,7 +131,12 @@ export function collectFiles(
   index: Map<string, MapNode>,
 ): string[] {
   const files = new Set(node.files);
+  const visited = new Set<string>();
   const visit = (candidate: MapNode) => {
+    if (visited.has(candidate.id)) {
+      return;
+    }
+    visited.add(candidate.id);
     for (const file of candidate.files) {
       files.add(file);
     }
@@ -184,7 +212,7 @@ export async function layoutGraph(
       }),
     ),
   };
-  const result = await elk.layout(graph);
+  const result = await (await elk()).layout(graph);
   const nodeIndex = new Map(nodes.map((node) => [node.id, node]));
   const positionedNodes = (result.children ?? []).flatMap((item) => {
     const node = nodeIndex.get(item.id);

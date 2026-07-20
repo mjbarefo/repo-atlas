@@ -8,6 +8,7 @@
     "build": "tsc -b && vite build",
     "generate:types": "json2ts -i ../shared/schemas/map.schema.json -o src/generated/map.ts && json2ts -i ../shared/schemas/trace.schema.json -o src/generated/trace.ts && json2ts -i ../shared/schemas/impact.schema.json -o src/generated/impact.ts",
     "check:generated": "node scripts/check-generated.mjs",
+    "typecheck": "tsc -b",
     "test": "vitest run"
   },
   "dependencies": {

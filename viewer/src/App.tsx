@@ -85,6 +85,13 @@ export function App() {
   const [watchUrl, setWatchUrl] = useState("ws://127.0.0.1:8765");
   const [liveStatus, setLiveStatus] = useState<LiveStatus>("disconnected");
   const socketRef = useRef<WebSocket | null>(null);
+  // Mirrors trace state for handlers whose closures may be stale (the live
+  // WebSocket callbacks are created once at connect time).
+  const traceStateRef = useRef<{
+    trace: TraceArtifact | null;
+    cursor: number;
+    turn: number | null;
+  }>({ trace: null, cursor: 0, turn: null });
   const [loadError, setLoadError] = useState("");
   const [path, setPath] = useState<ViewPath>([]);
   const [selectedId, setSelectedId] = useState<string | null>(null);
@@ -150,6 +157,10 @@ export function App() {
         : { edited: [], read: [], unobserved: [] },
     [impact, trace],
   );
+
+  useEffect(() => {
+    traceStateRef.current = { trace, cursor: traceCursor, turn: traceTurn };
+  }, [trace, traceCursor, traceTurn]);
 
   useEffect(() => {
     let active = true;
@@ -248,12 +259,23 @@ export function App() {
     };
   }, [visibleNodes, visibleEdges]);
 
+  const disconnectLive = () => {
+    if (socketRef.current) {
+      socketRef.current.close();
+      socketRef.current = null;
+      setLiveStatus("disconnected");
+    }
+  };
+
   const openArtifact = async (event: ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
     if (!file) {
       return;
     }
     try {
+      // A live socket streams snapshots for the previous map's commit; keep
+      // it connected and every event would raise a commit-mismatch error.
+      disconnectLive();
       setArtifact(await readMap(file));
       setSourceRoot(".");
       setPath([]);
@@ -308,24 +330,39 @@ export function App() {
       );
       return;
     }
+    // Only snap the timeline to the new end when the user was already at the
+    // end; a live snapshot must not yank away a scrubbed-back inspection.
+    const previous = traceStateRef.current;
+    const following =
+      previous.trace === null ||
+      (previous.turn === null && previous.cursor >= traceEnd(previous.trace));
     setTrace(nextTrace);
-    setTraceCursor(traceEnd(nextTrace));
-    setTraceTurn(null);
+    if (following) {
+      setTraceCursor(traceEnd(nextTrace));
+      setTraceTurn(null);
+    }
     setLoadError("");
   };
 
   const toggleLive = () => {
     if (socketRef.current) {
-      socketRef.current.close();
-      socketRef.current = null;
-      setLiveStatus("disconnected");
+      disconnectLive();
       return;
     }
     setLiveStatus("connecting");
     const socket = new WebSocket(watchUrl);
     socketRef.current = socket;
-    socket.onopen = () => setLiveStatus("live");
+    // Every handler checks it still belongs to the current socket: a closed
+    // socket's deferred events must not clobber a newer connection's state.
+    socket.onopen = () => {
+      if (socketRef.current === socket) {
+        setLiveStatus("live");
+      }
+    };
     socket.onmessage = (message) => {
+      if (socketRef.current !== socket) {
+        return;
+      }
       try {
         const value: unknown = JSON.parse(String(message.data));
         if (
@@ -342,8 +379,15 @@ export function App() {
         setLiveStatus("error");
       }
     };
-    socket.onerror = () => setLiveStatus("error");
+    socket.onerror = () => {
+      if (socketRef.current === socket) {
+        setLiveStatus("error");
+      }
+    };
     socket.onclose = () => {
+      if (socketRef.current !== socket) {
+        return;
+      }
       socketRef.current = null;
       setLiveStatus((current) =>
         current === "error" ? "error" : "disconnected",
@@ -718,16 +762,18 @@ function MapCanvas({
       x: event.clientX - bounds.left,
       y: event.clientY - bounds.top,
     };
-    const nextScale = Math.min(
-      2.4,
-      Math.max(0.18, transform.scale * Math.exp(-event.deltaY * 0.0015)),
-    );
-    const graphX = (point.x - transform.x) / transform.scale;
-    const graphY = (point.y - transform.y) / transform.scale;
-    setTransform({
-      scale: nextScale,
-      x: point.x - graphX * nextScale,
-      y: point.y - graphY * nextScale,
+    const factor = Math.exp(-event.deltaY * 0.0015);
+    // Functional update: several wheel events can land in one React batch,
+    // and each must anchor against the transform the previous one produced.
+    setTransform((current) => {
+      const nextScale = Math.min(2.4, Math.max(0.18, current.scale * factor));
+      const graphX = (point.x - current.x) / current.scale;
+      const graphY = (point.y - current.y) / current.scale;
+      return {
+        scale: nextScale,
+        x: point.x - graphX * nextScale,
+        y: point.y - graphY * nextScale,
+      };
     });
   };
 
