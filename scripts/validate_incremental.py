@@ -20,8 +20,12 @@ def _sha256(path: Path) -> str:
 
 
 def main() -> None:
-    parser = argparse.ArgumentParser()
-    parser.add_argument("repo", type=Path)
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument(
+        "repo",
+        type=Path,
+        help="Git checkout to copy and measure; the original is never modified",
+    )
     arguments = parser.parse_args()
     source = arguments.repo.resolve()
     if not (source / ".git").exists():

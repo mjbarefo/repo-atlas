@@ -23,9 +23,11 @@ atlas = "atlas_analyzer.cli:app"
 
 [dependency-groups]
 dev = [
+  "black>=25,<26",
   "datamodel-code-generator>=0.31,<1",
   "jsonschema[format]>=4.23,<5",
   "pytest>=8.3,<9",
+  "ruff>=0.9,<1",
 ]
 
 [build-system]
@@ -46,6 +48,8 @@ extend-exclude = "analyzer/src/atlas_analyzer/models/(map|trace|impact)\\.py"
 [tool.ruff]
 target-version = "py312"
 extend-exclude = [
-  "analyzer/src/atlas_analyzer/models",
+  "analyzer/src/atlas_analyzer/models/map.py",
+  "analyzer/src/atlas_analyzer/models/trace.py",
+  "analyzer/src/atlas_analyzer/models/impact.py",
   "analyzer/tests/fixtures",
 ]

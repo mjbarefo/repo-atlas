@@ -80,9 +80,11 @@ class RecordedProvider:
 
 
 def main() -> int:
-    parser = argparse.ArgumentParser()
-    parser.add_argument("input", type=Path)
-    parser.add_argument("output", type=Path)
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("input", type=Path, help="map.json artifact to enrich")
+    parser.add_argument(
+        "output", type=Path, help="destination for the enriched artifact"
+    )
     args = parser.parse_args()
 
     artifact = MapArtifact.model_validate_json(args.input.read_text())

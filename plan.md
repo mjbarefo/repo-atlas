@@ -1,6 +1,13 @@
 # ATLAS — Codebase Map + Agent Activity Visualizer
 ## End-to-End Build Plan (for delegation to Opus / GPT 5.6)
 
+> **Status (2026-07-20): historical record.** Phases 0–6 are complete with
+> verified exit evidence recorded inline below. This document is no longer
+> live instructions for an agent session; treat it as the build history and
+> the authoritative list of deferred post-MVP scope (section 5). Current
+> contributor conventions live in `AGENTS.md`; current usage lives in
+> `README.md`.
+
 This document is written to be pasted directly into an agentic coding session as the master spec. It follows a schema-first, phase-gated structure: every phase has explicit exit criteria the agent must demonstrate before proceeding. Do not let the agent skip gates.
 
 ---

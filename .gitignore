@@ -1,6 +1,7 @@
 .DS_Store
 .Codex/
 .codex/
+.claude/settings.local.json*
 .atlas/
 .venv/
 .pytest_cache/

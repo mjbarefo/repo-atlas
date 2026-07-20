@@ -159,8 +159,12 @@ def validate(source: Path) -> dict[str, object]:
 
 
 def main() -> int:
-    parser = argparse.ArgumentParser()
-    parser.add_argument("repository", type=Path)
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument(
+        "repository",
+        type=Path,
+        help="clean Git checkout to copy and mutate; the original is never modified",
+    )
     arguments = parser.parse_args()
     print(json.dumps(validate(arguments.repository), indent=2))
     return 0

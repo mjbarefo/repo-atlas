@@ -1,10 +1,15 @@
 # ATLAS
 
-ATLAS is a local-first codebase map and agent activity visualizer.
+ATLAS is a local-first codebase map and agent activity visualizer. It
+deterministically analyzes a repository into a layered architecture map,
+replays Claude Code sessions on top of that map, and reviews change impact
+against a Git base — all offline except one explicit, budget-capped LLM
+enrichment command.
 
-Phase 0 establishes the shared artifact contracts and generated Python and
-TypeScript bindings. Later phases add analysis, visualization, and trace
-ingestion.
+The repository contains a Python 3.12 analyzer CLI (`analyzer/`), a React
+viewer (`viewer/`), and the JSON Schema contracts both sides are generated
+from (`shared/schemas/`). See `AGENTS.md` for contributor conventions and
+`plan.md` for the completed phase-gated build history.
 
 ## Workstation setup
 
@@ -34,15 +39,26 @@ Run `atlas serve` from the ATLAS checkout so it can find `viewer/dist`, or pass
 Python 3.12, `uv`, Node.js, and npm are required. Analysis and viewing remain
 local; only the optional explicit enrichment command contacts a model provider.
 
-## Phase 0 development
+## Development
+
+Run every check with one command:
+
+```bash
+make check
+```
+
+Or invoke the underlying steps directly:
 
 ```bash
 uv sync --no-editable --reinstall-package atlas-analyzer
 .venv/bin/python scripts/generate_models.py --check
 .venv/bin/pytest
+.venv/bin/black --check analyzer scripts
+.venv/bin/ruff check analyzer scripts
 
-npm --prefix viewer install
+npm --prefix viewer ci
 npm --prefix viewer run check:generated
+npm --prefix viewer run typecheck
 npm --prefix viewer test
 npm --prefix viewer run build
 ```
@@ -156,9 +172,17 @@ checkout. Use the file picker when only local browser viewing is needed.
 ## Claude Code traces
 
 Merge the hook definitions in `docs/claude-code-hooks.json` into a repository's
-`.claude/settings.json`. The command hook records `Read`, `Edit`, `Write`,
+`.claude/settings.json`. The hook command resolves the script through
+`${ATLAS_CHECKOUT:-$CLAUDE_PROJECT_DIR}`: inside the ATLAS checkout it works
+as-is, and for any other repository set `ATLAS_CHECKOUT` to the ATLAS checkout
+path (for example in the target repo's `.claude/settings.json` `env` block:
+`"env": {"ATLAS_CHECKOUT": "/path/to/repo-atlas"}`).
+
+The command hook records `Read`, `Edit`, `Write`,
 `Grep`, and `Bash` calls under `.atlas/raw/<session>.jsonl`; recognized test
-commands are classified as `Test`. Both hook phases are retained in the raw
+commands are classified as `Test`. Recorded Bash commands are scrubbed of
+common credential shapes (authorization headers, `KEY=`/`TOKEN=` assignments,
+password flags, and URL-embedded credentials) before they reach disk. Both hook phases are retained in the raw
 log and paired by Claude's tool-use ID.
 
 Resolve a completed raw session against its map:
