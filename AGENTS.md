@@ -16,8 +16,11 @@ Do not manually edit `analyzer/src/atlas_analyzer/models/{map,trace,impact}.py` 
 ## Build, Test, and Development Commands
 
 `make sync` installs both locked environments; `make check` runs every quality
-gate (also enforced by `.github/workflows/ci.yml`). The underlying commands,
-using the locked, non-editable Python environment:
+gate (also enforced by `.github/workflows/ci.yml`). Invoke the installed CLI
+and tools directly as `.venv/bin/atlas`, `.venv/bin/pytest`, etc. — do not use
+`uv run`; editable installs are unreliable on this project's runtime because
+hidden `.pth` files are skipped, which is why the install is non-editable. The
+underlying commands:
 
 ```bash
 uv sync --no-editable --reinstall-package atlas-analyzer
@@ -66,7 +69,14 @@ Name Python tests `test_*.py` and TypeScript tests `*.test.ts` or `*.test.tsx`. 
 
 ## Commit & Pull Request Guidelines
 
-History currently contains one broad, imperative commit (`Initial ATLAS MVP through Phase 6`), so no detailed convention is established. Use a concise imperative subject and keep each commit focused. Pull requests should explain intent, list verification commands, link relevant issues, and call out schema or generated-file changes. Include screenshots for viewer changes and document any deferred validation.
+Use a concise imperative subject and keep each commit focused on one theme (see the post-MVP history for examples: analyzer correctness, server hardening, viewer fixes, and tooling landed as separate commits). Pull requests should explain intent, list verification commands, link relevant issues, and call out schema or generated-file changes. Include screenshots for viewer changes and document any deferred validation.
+
+## Dependency Pinning
+
+Python dependencies use minimum-only pins (`>=x`, no upper bounds) — minimums
+sit at security-patched floors and `uv.lock` governs the installed versions.
+Do not add upper bounds; upgrades happen through a deliberate `uv lock
+--upgrade` vetted by the full check suite.
 
 ## Security & Configuration
 

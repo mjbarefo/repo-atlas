@@ -1,6 +1,7 @@
 .DS_Store
 .Codex/
 .codex/
+.agent/
 .claude/settings.local.json*
 .atlas/
 .venv/
