@@ -2,7 +2,7 @@
 .Codex/
 .codex/
 .agent/
-.claude/settings.local.json*
+**/.claude/settings.local.json*
 .atlas/
 .venv/
 .pytest_cache/
