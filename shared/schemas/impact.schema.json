@@ -1,0 +1,87 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://atlas.local/schemas/impact.schema.json",
+  "title": "ImpactArtifact",
+  "description": "A deterministic projection of local Git changes onto an ATLAS map.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "map_ref",
+    "comparison",
+    "files",
+    "direct_dependents",
+    "review_order",
+    "summary"
+  ],
+  "properties": {
+    "schema_version": { "const": "1.0" },
+    "map_ref": { "$ref": "#/$defs/mapRef" },
+    "comparison": { "$ref": "#/$defs/comparison" },
+    "files": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/fileChange" }
+    },
+    "direct_dependents": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/directDependent" }
+    },
+    "review_order": {
+      "type": "array",
+      "items": { "type": "string", "minLength": 1 },
+      "uniqueItems": true
+    },
+    "summary": { "$ref": "#/$defs/summary" }
+  },
+  "$defs": {
+    "mapRef": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["commit"],
+      "properties": {
+        "commit": { "type": "string", "minLength": 1 }
+      }
+    },
+    "comparison": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["base", "head"],
+      "properties": {
+        "base": { "type": "string", "minLength": 1 },
+        "head": { "type": "string", "minLength": 1 }
+      }
+    },
+    "fileChange": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["path", "status"],
+      "properties": {
+        "path": { "type": "string", "minLength": 1 },
+        "old_path": { "type": "string", "minLength": 1 },
+        "status": {
+          "enum": ["added", "modified", "deleted", "renamed", "copied", "type_changed"]
+        },
+        "node_id": { "type": "string", "minLength": 1 }
+      }
+    },
+    "directDependent": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["changed_node_id", "dependent_node_id"],
+      "properties": {
+        "changed_node_id": { "type": "string", "minLength": 1 },
+        "dependent_node_id": { "type": "string", "minLength": 1 }
+      }
+    },
+    "summary": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["changed_files", "mapped_files", "direct_dependents"],
+      "properties": {
+        "changed_files": { "type": "integer", "minimum": 0 },
+        "mapped_files": { "type": "integer", "minimum": 0 },
+        "direct_dependents": { "type": "integer", "minimum": 0 }
+      }
+    }
+  }
+}

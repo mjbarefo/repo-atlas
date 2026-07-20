@@ -1,0 +1,30 @@
+{
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "Read|Edit|Write|Bash|Grep",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 \"$CLAUDE_PROJECT_DIR/scripts/atlas_claude_hook.py\"",
+            "timeout": 10,
+            "statusMessage": "Recording ATLAS activity"
+          }
+        ]
+      }
+    ],
+    "PostToolUse": [
+      {
+        "matcher": "Read|Edit|Write|Bash|Grep",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 \"$CLAUDE_PROJECT_DIR/scripts/atlas_claude_hook.py\"",
+            "timeout": 10,
+            "statusMessage": "Recording ATLAS activity"
+          }
+        ]
+      }
+    ]
+  }
+}

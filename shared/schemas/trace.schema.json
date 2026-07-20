@@ -1,0 +1,69 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://atlas.local/schemas/trace.schema.json",
+  "title": "TraceArtifact",
+  "description": "A time-ordered agent session resolved against an ATLAS map.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "session_id", "agent", "map_ref", "events", "summary"],
+  "properties": {
+    "schema_version": { "const": "1.0" },
+    "session_id": { "type": "string", "minLength": 1 },
+    "agent": { "type": "string", "minLength": 1 },
+    "map_ref": { "$ref": "#/$defs/mapRef" },
+    "events": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/event" }
+    },
+    "summary": { "$ref": "#/$defs/summary" }
+  },
+  "$defs": {
+    "mapRef": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["commit"],
+      "properties": {
+        "commit": { "type": "string", "minLength": 1 }
+      }
+    },
+    "event": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["t", "tool", "path", "node_id", "detail", "turn"],
+      "properties": {
+        "t": { "type": "number", "minimum": 0 },
+        "tool": { "enum": ["Read", "Edit", "Write", "Bash", "Grep", "Test"] },
+        "path": { "type": "string" },
+        "node_id": {
+          "anyOf": [
+            { "type": "string", "minLength": 1 },
+            { "type": "null" }
+          ]
+        },
+        "detail": {
+          "type": "object",
+          "additionalProperties": {
+            "anyOf": [
+              { "type": "string" },
+              { "type": "integer" },
+              { "type": "number" },
+              { "type": "boolean" },
+              { "type": "null" }
+            ]
+          }
+        },
+        "turn": { "type": "integer", "minimum": 0 }
+      }
+    },
+    "summary": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["files_read", "files_edited", "tests_run"],
+      "properties": {
+        "files_read": { "type": "integer", "minimum": 0 },
+        "files_edited": { "type": "integer", "minimum": 0 },
+        "tests_run": { "type": "integer", "minimum": 0 }
+      }
+    }
+  }
+}

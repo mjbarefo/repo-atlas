@@ -1,0 +1,36 @@
+{
+  "comparison": {
+    "base": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    "head": "0123456789abcdef0123456789abcdef01234567"
+  },
+  "direct_dependents": [
+    {
+      "changed_node_id": "file:src/auth/store.py",
+      "dependent_node_id": "file:src/auth/session.py"
+    }
+  ],
+  "files": [
+    {
+      "node_id": "file:src/auth/store.py",
+      "path": "src/auth/store.py",
+      "status": "modified"
+    },
+    {
+      "path": "README.md",
+      "status": "modified"
+    }
+  ],
+  "map_ref": {
+    "commit": "0123456789abcdef0123456789abcdef01234567"
+  },
+  "review_order": [
+    "src/auth/store.py",
+    "README.md"
+  ],
+  "schema_version": "1.0",
+  "summary": {
+    "changed_files": 2,
+    "direct_dependents": 1,
+    "mapped_files": 1
+  }
+}

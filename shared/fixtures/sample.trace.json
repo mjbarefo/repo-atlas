@@ -1,0 +1,40 @@
+{
+  "schema_version": "1.0",
+  "session_id": "cc-2026-07-20-a",
+  "agent": "claude-code",
+  "map_ref": {
+    "commit": "0123456789abcdef0123456789abcdef01234567"
+  },
+  "events": [
+    {
+      "t": 0.0,
+      "tool": "Read",
+      "path": "src/auth/session.py",
+      "node_id": "file:src/auth/session.py",
+      "detail": {},
+      "turn": 1
+    },
+    {
+      "t": 8.25,
+      "tool": "Edit",
+      "path": "src/auth/session.py",
+      "node_id": "file:src/auth/session.py",
+      "detail": { "lines_changed": 14 },
+      "turn": 2
+    },
+    {
+      "t": 12.5,
+      "tool": "Bash",
+      "path": "",
+      "node_id": null,
+      "detail": { "command": "pytest", "success": true },
+      "turn": 3
+    }
+  ],
+  "summary": {
+    "files_read": 1,
+    "files_edited": 1,
+    "tests_run": 1
+  }
+}
+

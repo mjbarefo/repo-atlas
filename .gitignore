@@ -1,0 +1,14 @@
+.DS_Store
+.Codex/
+.codex/
+.atlas/
+.venv/
+.pytest_cache/
+.ruff_cache/
+__pycache__/
+*.py[cod]
+*.egg-info/
+build/
+dist/
+viewer/node_modules/
+viewer/dist/

@@ -1,0 +1,51 @@
+[project]
+name = "atlas-analyzer"
+version = "0.1.0"
+description = "Static analysis and trace ingestion for ATLAS"
+readme = "README.md"
+requires-python = ">=3.12,<3.13"
+dependencies = [
+  "json5>=0.12,<1",
+  "litellm>=1.77,<2",
+  "networkx>=3.6,<4",
+  "pathspec>=0.12,<1",
+  "pydantic>=2.10,<3",
+  "tree-sitter>=0.25,<0.26",
+  "tree-sitter-javascript>=0.25,<0.26",
+  "tree-sitter-python>=0.25,<0.26",
+  "tree-sitter-typescript>=0.23,<0.24",
+  "typer>=0.16,<1",
+  "websockets>=15,<16",
+]
+
+[project.scripts]
+atlas = "atlas_analyzer.cli:app"
+
+[dependency-groups]
+dev = [
+  "datamodel-code-generator>=0.31,<1",
+  "jsonschema[format]>=4.23,<5",
+  "pytest>=8.3,<9",
+]
+
+[build-system]
+requires = ["setuptools>=77"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+where = ["analyzer/src"]
+
+[tool.pytest.ini_options]
+testpaths = ["analyzer/tests"]
+pythonpath = ["analyzer/src"]
+addopts = "-q"
+
+[tool.black]
+extend-exclude = "analyzer/src/atlas_analyzer/models/(map|trace|impact)\\.py"
+
+[tool.ruff]
+target-version = "py312"
+extend-exclude = [
+  "analyzer/src/atlas_analyzer/models",
+  "analyzer/tests/fixtures",
+]

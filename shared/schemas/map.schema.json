@@ -1,0 +1,130 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://atlas.local/schemas/map.schema.json",
+  "title": "MapArtifact",
+  "description": "A deterministic, evidence-backed map of a source repository.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "repo", "nodes", "edges", "levels"],
+  "properties": {
+    "schema_version": { "const": "1.0" },
+    "repo": { "$ref": "#/$defs/repository" },
+    "nodes": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/node" }
+    },
+    "edges": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/edge" }
+    },
+    "levels": { "$ref": "#/$defs/levels" }
+  },
+  "$defs": {
+    "repository": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["root", "commit", "generated_at"],
+      "properties": {
+        "root": { "type": "string" },
+        "commit": { "type": "string", "minLength": 1 },
+        "generated_at": { "type": "string", "format": "date-time" }
+      }
+    },
+    "metrics": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["loc", "fan_in", "fan_out"],
+      "properties": {
+        "loc": { "type": "integer", "minimum": 0 },
+        "fan_in": { "type": "integer", "minimum": 0 },
+        "fan_out": { "type": "integer", "minimum": 0 }
+      }
+    },
+    "node": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "kind",
+        "label",
+        "summary",
+        "prose_source",
+        "children",
+        "files",
+        "metrics"
+      ],
+      "properties": {
+        "id": { "type": "string", "minLength": 1 },
+        "kind": { "enum": ["component", "module", "file"] },
+        "label": { "type": "string", "minLength": 1 },
+        "summary": { "type": "string" },
+        "prose_source": { "enum": ["heuristic", "llm"] },
+        "children": {
+          "type": "array",
+          "items": { "type": "string", "minLength": 1 },
+          "uniqueItems": true
+        },
+        "files": {
+          "type": "array",
+          "items": { "type": "string", "minLength": 1 },
+          "uniqueItems": true
+        },
+        "metrics": { "$ref": "#/$defs/metrics" }
+      }
+    },
+    "evidence": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["file", "line"],
+      "properties": {
+        "file": { "type": "string", "minLength": 1 },
+        "line": { "type": "integer", "minimum": 1 }
+      }
+    },
+    "edge": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["source", "target", "kind", "evidence"],
+      "properties": {
+        "source": { "type": "string", "minLength": 1 },
+        "target": { "type": "string", "minLength": 1 },
+        "kind": { "enum": ["imports", "calls", "inherits"] },
+        "evidence": {
+          "type": "array",
+          "minItems": 1,
+          "items": { "$ref": "#/$defs/evidence" }
+        },
+        "label": { "type": "string" }
+      }
+    },
+    "levels": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["system", "component", "module"],
+      "properties": {
+        "system": {
+          "type": "array",
+          "items": { "type": "string", "minLength": 1 },
+          "uniqueItems": true
+        },
+        "component": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "array",
+            "items": { "type": "string", "minLength": 1 },
+            "uniqueItems": true
+          }
+        },
+        "module": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "array",
+            "items": { "type": "string", "minLength": 1 },
+            "uniqueItems": true
+          }
+        }
+      }
+    }
+  }
+}
+

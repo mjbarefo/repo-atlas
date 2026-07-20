@@ -1,0 +1,9 @@
+{
+  "compilerOptions": {
+    "baseUrl": "web",
+    "paths": {
+      "@lib/*": ["lib/*"]
+    }
+  }
+}
+
