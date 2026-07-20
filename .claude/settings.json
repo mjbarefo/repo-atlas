@@ -1,0 +1,17 @@
+{
+  "hooks": {
+    "PostToolUse": [
+      {
+        "matcher": "Write|Edit",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "jq -r '.tool_input.file_path // .tool_response.filePath // empty' | { read -r f; case \"$f\" in *atlas_analyzer/models/map.py|*atlas_analyzer/models/trace.py|*atlas_analyzer/models/impact.py|*analyzer/tests/fixtures/*) ;; *.py) \"$CLAUDE_PROJECT_DIR/.venv/bin/black\" -q \"$f\" ;; esac; } 2>/dev/null || true",
+            "timeout": 30,
+            "statusMessage": "Formatting with black"
+          }
+        ]
+      }
+    ]
+  }
+}

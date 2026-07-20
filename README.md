@@ -39,6 +39,22 @@ Run `atlas serve` from the ATLAS checkout so it can find `viewer/dist`, or pass
 Python 3.12, `uv`, Node.js, and npm are required. Analysis and viewing remain
 local; only the optional explicit enrichment command contacts a model provider.
 
+## Updating an existing workstation
+
+Bring a previously set-up checkout to the latest version:
+
+```bash
+git pull --ff-only origin main
+make sync
+npm --prefix viewer run build
+```
+
+`make sync` reinstalls the locked, non-editable Python environment and the
+viewer's locked npm dependencies; the build step refreshes `viewer/dist` so
+`atlas serve` serves the current viewer. Verify with `.venv/bin/atlas --help`
+for a quick smoke test or `make check` for the full gate. In a Claude Code
+session, `/update-workstation` runs this whole flow with preflight checks.
+
 ## Development
 
 Run every check with one command:
