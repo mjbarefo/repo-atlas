@@ -27,32 +27,65 @@ IGNORED_DIRECTORIES = {
 }
 
 
-def _ignore_spec(root: Path) -> GitIgnoreSpec:
-    ignore_file = root / ".gitignore"
-    lines = ignore_file.read_text().splitlines() if ignore_file.exists() else []
-    return GitIgnoreSpec.from_lines(lines)
+def _spec_from_file(path: Path) -> GitIgnoreSpec | None:
+    try:
+        lines = path.read_text().splitlines()
+    except OSError:
+        return None
+    return GitIgnoreSpec.from_lines(lines) if lines else None
+
+
+IgnoreLayers = tuple[tuple[Path, GitIgnoreSpec], ...]
+
+
+def _ignored(path: Path, layers: IgnoreLayers, *, is_dir: bool) -> bool:
+    """Apply gitignore layers with git's precedence: the innermost matching
+    pattern wins, so a nested .gitignore can re-include what a parent
+    excluded (unless the parent directory itself was pruned)."""
+    ignored = False
+    for base, spec in layers:
+        relative = path.relative_to(base).as_posix()
+        if is_dir:
+            relative += "/"
+        include = spec.check_file(relative).include
+        if include is not None:
+            ignored = include
+    return ignored
 
 
 def source_files(root: Path) -> list[Path]:
+    """Walk ROOT honoring nested .gitignore files and .git/info/exclude so
+    discovery agrees with what git itself tracks; a file discovered here but
+    invisible to git-based change detection would make incremental analysis
+    silently stale."""
     root = root.resolve()
-    spec = _ignore_spec(root)
     result: list[Path] = []
+    root_layers: list[tuple[Path, GitIgnoreSpec]] = []
+    exclude_spec = _spec_from_file(root / ".git" / "info" / "exclude")
+    if exclude_spec is not None:
+        root_layers.append((root, exclude_spec))
 
-    for current, directories, files in os.walk(root):
-        current_path = Path(current)
-        kept_directories: list[str] = []
-        for directory in sorted(directories):
-            candidate = current_path / directory
-            relative = candidate.relative_to(root).as_posix() + "/"
-            if directory not in IGNORED_DIRECTORIES and not spec.match_file(relative):
-                kept_directories.append(directory)
-        directories[:] = kept_directories
+    def walk(directory: Path, layers: IgnoreLayers) -> None:
+        local = _spec_from_file(directory / ".gitignore")
+        if local is not None:
+            layers = (*layers, (directory, local))
+        try:
+            entries = sorted(directory.iterdir(), key=lambda entry: entry.name)
+        except OSError:
+            return
+        for entry in entries:
+            if entry.is_dir():
+                if entry.name in IGNORED_DIRECTORIES:
+                    continue
+                if _ignored(entry, layers, is_dir=True):
+                    continue
+                walk(entry, layers)
+            elif classify(entry) is not None and not _ignored(
+                entry, layers, is_dir=False
+            ):
+                result.append(entry)
 
-        for filename in sorted(files):
-            path = current_path / filename
-            relative = path.relative_to(root).as_posix()
-            if classify(path) is not None and not spec.match_file(relative):
-                result.append(path)
+    walk(root, tuple(root_layers))
     return sorted(result, key=lambda path: path.relative_to(root).as_posix())
 
 
@@ -64,11 +97,23 @@ class TsConfig:
 
 
 def _tsconfigs(root: Path) -> list[TsConfig]:
+    # Prune ignored directories before descending: rglob would physically walk
+    # all of node_modules/.git/dist on every analysis run just to discard the
+    # results afterwards.
+    found: list[Path] = []
+    for current, directories, files in os.walk(root):
+        directories[:] = sorted(
+            name for name in directories if name not in IGNORED_DIRECTORIES
+        )
+        if "tsconfig.json" in files:
+            found.append(Path(current) / "tsconfig.json")
+
     configs: list[TsConfig] = []
-    for path in sorted(root.rglob("tsconfig.json")):
-        if any(part in IGNORED_DIRECTORIES for part in path.relative_to(root).parts):
+    for path in sorted(found):
+        try:
+            data = json5.loads(path.read_text())
+        except (OSError, ValueError):
             continue
-        data = json5.loads(path.read_text())
         compiler = data.get("compilerOptions", {})
         base_url = (path.parent / compiler.get("baseUrl", ".")).resolve()
         aliases = {
@@ -134,7 +179,12 @@ class ImportResolver:
         conventional_src = self.root / "src"
         if conventional_src.is_dir():
             search_roots.append(conventional_src)
-        search_roots.extend(importer.parents[:-1])
+        # Stay inside the repository: resolution is bounded by self.files
+        # anyway, and probing ancestors above the root risks PermissionError
+        # on restricted parent directories.
+        search_roots.extend(
+            parent for parent in importer.parents if parent.is_relative_to(self.root)
+        )
         for search_root in dict.fromkeys(search_roots):
             candidate = _existing_python_candidate(search_root.joinpath(*parts))
             if candidate:

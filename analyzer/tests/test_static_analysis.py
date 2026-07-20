@@ -39,6 +39,36 @@ def test_walk_classifies_sources_and_respects_gitignore(tmp_path: Path) -> None:
     ]
 
 
+def test_nested_gitignore_layers_match_git(tmp_path: Path) -> None:
+    repo = tmp_path / "repo"
+    shutil.copytree(FIXTURE, repo)
+    generated = repo / "src" / "generated"
+    generated.mkdir()
+    (generated / ".gitignore").write_text("*.py\n!keep.py\n")
+    (generated / "machine.py").write_text("VALUE = 1\n")
+    (generated / "keep.py").write_text("VALUE = 2\n")
+
+    paths = [path.relative_to(repo).as_posix() for path in source_files(repo)]
+
+    assert "src/generated/machine.py" not in paths
+    assert "src/generated/keep.py" in paths
+
+
+def test_unparsable_file_degrades_without_aborting(tmp_path: Path) -> None:
+    repo = tmp_path / "repo"
+    shutil.copytree(FIXTURE, repo)
+    (repo / "src" / "legacy.py").write_text("print 'python 2 syntax'\n")
+
+    artifact = analyze_file_graph(repo)
+
+    node = next(node for node in artifact.nodes if node.id == "file:src/legacy.py")
+    assert node.metrics.loc == 1
+    assert all(
+        "file:src/legacy.py" not in (edge.source, edge.target)
+        for edge in artifact.edges
+    )
+
+
 def test_tree_sitter_builds_symbol_tables() -> None:
     python_table = parse_file(FIXTURE / "src" / "app.py")
     typescript_table = parse_file(FIXTURE / "web" / "main.ts")

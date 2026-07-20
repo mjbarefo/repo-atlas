@@ -7,11 +7,27 @@ import hashlib
 import json
 from pathlib import Path
 import subprocess
+import sys
 
+from atlas_analyzer.artifact_io import atomic_write_text
 from atlas_analyzer.models import MapArtifact
 
-from .languages import classify, parse_file
+from .facts import SymbolTable
+from .languages import classify, parse_file, unparsable_table
 from .repository import ImportResolver, source_files
+
+
+def parse_source_file(path: Path) -> SymbolTable:
+    """Parse one source file, degrading to an import-free table (with a
+    stderr warning) when the file cannot be parsed; one legacy or non-UTF-8
+    file must not abort analysis of the whole repository. Full and
+    incremental analysis share this policy so their artifacts stay
+    byte-identical."""
+    try:
+        return parse_file(path)
+    except (SyntaxError, UnicodeDecodeError, ValueError) as error:
+        print(f"atlas: imports skipped for unparsable {path}: {error}", file=sys.stderr)
+        return unparsable_table(path, classify(path) or "unknown")
 
 
 @dataclass(frozen=True)
@@ -83,6 +99,15 @@ def _dirty_source_paths(root: Path) -> list[str]:
     return sorted(paths)
 
 
+def current_worktree_version(root: Path, commit: str) -> str:
+    """Deterministic source version for COMMIT plus any dirty source paths;
+    equals COMMIT exactly when the worktree is clean."""
+    dirty = _dirty_source_paths(root)
+    if not dirty:
+        return commit
+    return f"worktree:{commit}:{_git_worktree_digest(root, commit, dirty)}"
+
+
 def _repository_identity(root: Path, files: list[Path]) -> tuple[str, str]:
     try:
         commit = subprocess.run(
@@ -103,11 +128,7 @@ def _repository_identity(root: Path, files: list[Path]) -> tuple[str, str]:
             .isoformat()
             .replace("+00:00", "Z")
         )
-        dirty = _dirty_source_paths(root)
-        if dirty:
-            digest = _git_worktree_digest(root, commit, dirty)
-            return f"worktree:{commit}:{digest}", generated_at
-        return commit, generated_at
+        return current_worktree_version(root, commit), generated_at
     except (subprocess.CalledProcessError, ValueError):
         return f"worktree:{_worktree_digest(root, files)}", "1970-01-01T00:00:00Z"
 
@@ -115,7 +136,7 @@ def _repository_identity(root: Path, files: list[Path]) -> tuple[str, str]:
 def analyze_file_graph(root: Path) -> MapArtifact:
     root = root.resolve()
     files = source_files(root)
-    tables = [parse_file(path) for path in files]
+    tables = [parse_source_file(path) for path in files]
     resolver = ImportResolver(root, files)
     relative = {path.resolve(): path.relative_to(root).as_posix() for path in files}
 
@@ -265,7 +286,7 @@ def _incremental_file_graph(
     files = list(relative.values())
 
     changed_existing = [path for path in changed if path in relative]
-    tables = [parse_file(relative[path]) for path in changed_existing]
+    tables = [parse_source_file(relative[path]) for path in changed_existing]
     resolver = ImportResolver(root, files)
     path_by_resolved = {
         path.resolve(): relative_path for relative_path, path in relative.items()
@@ -377,6 +398,5 @@ def analyze_repository_incremental(
 
 
 def write_map(artifact: MapArtifact, output: Path) -> None:
-    output.parent.mkdir(parents=True, exist_ok=True)
     payload = artifact.model_dump(mode="json", exclude_none=True)
-    output.write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n")
+    atomic_write_text(output, json.dumps(payload, indent=2, sort_keys=True) + "\n")

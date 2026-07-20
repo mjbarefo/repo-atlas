@@ -4,6 +4,7 @@ import json
 from pathlib import Path
 import subprocess
 
+import pytest
 from typer.testing import CliRunner
 
 from atlas_analyzer.analysis.analyzer import analyze_repository, write_map
@@ -47,6 +48,18 @@ def _change_worktree(repo: Path) -> None:
     (repo / "README.md").write_text("# After\n")
     (repo / "new.py").write_text("import b\n")
     (repo / "notes.txt").write_text("untracked\n")
+
+
+def test_impact_rejects_map_from_stale_worktree_state(tmp_path: Path) -> None:
+    repo, base = _repo(tmp_path)
+    (repo / "b.py").write_text("VALUE = 2\n")
+    artifact = analyze_repository(repo)
+    # Revert the dirty edit without re-analyzing: the map's worktree digest
+    # now describes a state that no longer exists on disk.
+    (repo / "b.py").write_text("VALUE = 1\n")
+
+    with pytest.raises(ValueError, match="no longer matches"):
+        build_impact(repo, artifact, base=base)
 
 
 def test_worktree_impact_is_exact_deterministic_and_dependency_ordered(

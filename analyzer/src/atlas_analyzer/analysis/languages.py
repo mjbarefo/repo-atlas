@@ -204,5 +204,28 @@ def parse_file(path: Path) -> SymbolTable:
             )
         ),
         exports=tuple(sorted(set(exports))),
-        loc=len(source.decode("utf-8").splitlines()),
+        loc=_line_count(source),
+    )
+
+
+def _line_count(source: bytes) -> int:
+    # errors="replace" keeps the count identical for valid UTF-8 while not
+    # crashing on files that parse via a non-UTF-8 encoding cookie.
+    return len(source.decode("utf-8", errors="replace").splitlines())
+
+
+def unparsable_table(path: Path, language: str) -> SymbolTable:
+    """Import-free table for a file the parsers reject; analysis degrades to
+    a node without edges instead of aborting the whole run."""
+    try:
+        source = path.read_bytes()
+    except OSError:
+        source = b""
+    return SymbolTable(
+        path=path,
+        language=language,
+        definitions=(),
+        imports=(),
+        exports=(),
+        loc=_line_count(source),
     )

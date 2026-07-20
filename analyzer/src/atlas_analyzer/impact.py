@@ -10,6 +10,8 @@ import subprocess
 
 import networkx as nx
 
+from .analysis.analyzer import current_worktree_version
+from .artifact_io import atomic_write_text
 from .models import ImpactArtifact, MapArtifact
 
 
@@ -206,13 +208,29 @@ def build_impact(
 ) -> ImpactArtifact:
     """Build a deterministic change-impact artifact for one local comparison."""
     base_commit, head_commit, changes = changed_files(repo, base, head)
-    map_commit = _map_base_commit(artifact.repo.commit)
+    map_version = artifact.repo.commit
+    map_commit = _map_base_commit(map_version)
     if map_commit != head_commit:
         selected = f"head {head!r}" if head is not None else "the current HEAD"
         raise ValueError(
             f"map is based on {map_commit}, but {selected} resolves to {head_commit}; "
             "analyze the selected head before building impact"
         )
+    if map_version.startswith("worktree:"):
+        if head is not None:
+            raise ValueError(
+                "map was built from a dirty worktree and cannot describe "
+                f"committed head {head!r}; commit or re-analyze first"
+            )
+        # The digest half of a worktree version captures the dirty file
+        # contents at analysis time. If it no longer matches, the map's edges
+        # describe a worktree state that no longer exists and would project
+        # phantom dependencies onto the review.
+        if current_worktree_version(repo.resolve(), map_commit) != map_version:
+            raise ValueError(
+                "map no longer matches the current worktree state; re-run "
+                "atlas analyze (or analyze --incremental) before building impact"
+            )
 
     node_by_path = _file_nodes(artifact)
     changed_nodes = {
@@ -262,6 +280,5 @@ def build_impact(
 
 
 def write_impact(artifact: ImpactArtifact, output: Path) -> None:
-    output.parent.mkdir(parents=True, exist_ok=True)
     payload = artifact.model_dump(mode="json", exclude_none=True)
-    output.write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n")
+    atomic_write_text(output, json.dumps(payload, indent=2, sort_keys=True) + "\n")
