@@ -119,7 +119,6 @@ version = "0.1.0"
 source = { editable = "." }
 dependencies = [
     { name = "json5" },
-    { name = "litellm" },
     { name = "networkx" },
     { name = "pathspec" },
     { name = "pydantic" },
@@ -129,6 +128,11 @@ dependencies = [
     { name = "tree-sitter-typescript" },
     { name = "typer" },
     { name = "websockets" },
+]
+
+[package.optional-dependencies]
+enrichment = [
+    { name = "litellm" },
 ]
 
 [package.dev-dependencies]
@@ -143,7 +147,7 @@ dev = [
 [package.metadata]
 requires-dist = [
     { name = "json5", specifier = ">=0.12" },
-    { name = "litellm", specifier = ">=1.77" },
+    { name = "litellm", marker = "extra == 'enrichment'", specifier = ">=1.77" },
     { name = "networkx", specifier = ">=3.6" },
     { name = "pathspec", specifier = ">=1.0" },
     { name = "pydantic", specifier = ">=2.10" },
@@ -154,6 +158,7 @@ requires-dist = [
     { name = "typer", specifier = ">=0.16" },
     { name = "websockets", specifier = ">=15" },
 ]
+provides-extras = ["enrichment"]
 
 [package.metadata.requires-dev]
 dev = [

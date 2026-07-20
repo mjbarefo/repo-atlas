@@ -72,7 +72,13 @@ class LiteLLMProvider:
         temperature: float,
     ) -> ProviderResult:
         os.environ["LITELLM_LOCAL_MODEL_COST_MAP"] = "True"
-        import litellm
+        try:
+            import litellm
+        except ImportError as error:
+            raise RuntimeError(
+                "litellm is not installed; enrichment is optional — install it "
+                "with `uv sync --extra enrichment`"
+            ) from error
 
         response = litellm.completion(
             model=model,
