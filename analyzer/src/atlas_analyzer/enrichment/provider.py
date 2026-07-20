@@ -254,8 +254,13 @@ class BudgetedEnrichmentClient:
             ) from error
         cost = self._cost(result.input_tokens, result.output_tokens)
         if self.total_cost_usd + cost > self.budget_usd:
+            # Unlike the pre-call stop above, this call already ran and was
+            # billed: the provider reported more usage than the local
+            # byte-length estimate. Make the overspend explicit.
             raise BudgetExceededError(
-                f"provider usage exceeded the ${self.budget_usd:.6f} budget"
+                f"provider call already spent ${cost:.6f}, exceeding the "
+                f"${self.budget_usd:.6f} budget after the fact; reported "
+                "usage was larger than the pre-call estimate"
             )
         self.records.append(
             CallRecord(

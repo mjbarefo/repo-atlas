@@ -6,6 +6,7 @@ import math
 import os
 from pathlib import Path
 import re
+import sys
 import tomllib
 from typing import Iterator
 
@@ -88,7 +89,14 @@ def provider_environment(keys: dict[str, str]) -> Iterator[None]:
     missing = object()
     previous: dict[str, str | object] = {}
     for name, value in keys.items():
-        previous[name] = os.environ.get(name, missing)
+        existing = os.environ.get(name)
+        previous[name] = existing if existing is not None else missing
+        if existing is not None and existing != value:
+            print(
+                f"atlas: environment variable {name} already set; "
+                "it takes precedence over the config.toml value",
+                file=sys.stderr,
+            )
         os.environ.setdefault(name, value)
     try:
         yield

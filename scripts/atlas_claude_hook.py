@@ -21,6 +21,36 @@ TEST_COMMAND = re.compile(
     re.IGNORECASE,
 )
 SUPPORTED_TOOLS = {"Read", "Edit", "Write", "Bash", "Grep"}
+SECRET_PATTERNS = [
+    # Authorization: Bearer <token>, Authorization: Basic <credentials>, ...
+    (re.compile(r"(?i)(authorization\s*:\s*\S+\s+)\S+"), r"\1[REDACTED]"),
+    # KEY=..., MY_TOKEN=..., PASSWORD=... assignments.
+    (
+        re.compile(
+            r"(?i)\b([A-Z0-9_]*(?:KEY|TOKEN|SECRET|PASSWORD|PASSWD)[A-Z0-9_]*"
+            r"\s*=\s*)(\"[^\"]*\"|'[^']*'|\S+)"
+        ),
+        r"\1[REDACTED]",
+    ),
+    # --password foo, --token=foo, --api-key foo, -p style long flags.
+    (
+        re.compile(
+            r"(?i)(--?(?:password|passwd|token|api-?key|secret)(?:[=\s]))"
+            r"(\"[^\"]*\"|'[^']*'|\S+)"
+        ),
+        r"\1[REDACTED]",
+    ),
+    # scheme://user:password@host credentials embedded in URLs.
+    (re.compile(r"://([^/\s:@]+):([^@/\s]+)@"), r"://\1:[REDACTED]@"),
+]
+
+
+def _redacted_command(command: str) -> str:
+    """Scrub common credential shapes before the command is persisted; raw
+    trace logs are broadcast to viewer clients and must never carry secrets."""
+    for pattern, replacement in SECRET_PATTERNS:
+        command = pattern.sub(replacement, command)
+    return command
 
 
 def _safe_session_id(value: str) -> str:
@@ -55,7 +85,7 @@ def _tool_and_path(
     detail: dict[str, str | int | float | bool | None] = {}
     if tool_name == "Bash":
         command = str(inputs.get("command") or "")
-        detail["command"] = command
+        detail["command"] = _redacted_command(command)
         tool = "Test" if TEST_COMMAND.search(command) else "Bash"
         return tool, "", detail
     if tool_name in {"Read", "Edit", "Write"}:
@@ -104,14 +134,17 @@ def capture(payload: dict[str, Any]) -> Path | None:
         fcntl.flock(lock_file, fcntl.LOCK_EX)
         state = _load_state(state_path)
         turns = state["turns"]
-        if tool_use_id not in turns:
-            turns[tool_use_id] = int(state["next_turn"])
+        # A missing tool_use_id must not collapse unrelated calls onto one
+        # shared turn slot; give each such event its own key instead.
+        turn_key = tool_use_id or f"_anonymous_{int(state['next_turn'])}"
+        if turn_key not in turns:
+            turns[turn_key] = int(state["next_turn"])
             state["next_turn"] = int(state["next_turn"]) + 1
         record = {
             "session_id": session_id,
             "agent": "claude-code",
             "timestamp": time.time(),
-            "turn": int(turns[tool_use_id]),
+            "turn": int(turns[turn_key]),
             "tool": tool,
             "path": path,
             "detail": detail,

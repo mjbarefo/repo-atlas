@@ -37,6 +37,18 @@ class ProviderChoice(str, Enum):
     litellm = "litellm"
 
 
+_LOOPBACK_HOSTS = {"127.0.0.1", "localhost", "::1"}
+
+
+def _warn_if_exposed(host: str, what: str) -> None:
+    if host not in _LOOPBACK_HOSTS:
+        typer.echo(
+            f"WARNING: {what} is binding non-loopback host {host!r}; ATLAS has "
+            "no authentication and this exposes the served data to the network.",
+            err=True,
+        )
+
+
 @app.callback()
 def main() -> None:
     """Map source architecture and agent activity."""
@@ -289,6 +301,7 @@ def serve(
     ),
 ) -> None:
     """Serve one map artifact in the local interactive viewer."""
+    _warn_if_exposed(host, "atlas serve")
     try:
         server = create_server(
             map_path,
@@ -388,6 +401,7 @@ def watch(
     port: int = typer.Option(8765, "--port", min=1, max=65535),
 ) -> None:
     """Tail raw JSONL and publish resolved trace snapshots over WebSocket."""
+    _warn_if_exposed(host, "atlas watch")
     typer.echo(f"ATLAS live trace: ws://{host}:{port}")
     try:
         asyncio.run(

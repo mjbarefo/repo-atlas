@@ -6,7 +6,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "python3 \"$CLAUDE_PROJECT_DIR/scripts/atlas_claude_hook.py\"",
+            "command": "python3 \"${ATLAS_CHECKOUT:-$CLAUDE_PROJECT_DIR}/scripts/atlas_claude_hook.py\"",
             "timeout": 10,
             "statusMessage": "Recording ATLAS activity"
           }
@@ -19,7 +19,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "python3 \"$CLAUDE_PROJECT_DIR/scripts/atlas_claude_hook.py\"",
+            "command": "python3 \"${ATLAS_CHECKOUT:-$CLAUDE_PROJECT_DIR}/scripts/atlas_claude_hook.py\"",
             "timeout": 10,
             "statusMessage": "Recording ATLAS activity"
           }

@@ -6,9 +6,12 @@ from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
 import json
 from pathlib import Path
 from typing import Any
+from urllib.parse import urlsplit
 
 from .models import ImpactArtifact, TraceArtifact
 from .query import load_map
+
+_LOOPBACK_HOSTNAMES = frozenset({"127.0.0.1", "localhost", "::1"})
 
 
 class AtlasViewerServer(ThreadingHTTPServer):
@@ -17,6 +20,9 @@ class AtlasViewerServer(ThreadingHTTPServer):
     impact_payload: bytes | None
     context_payload: bytes
     viewer_directory: Path
+    # Hostnames a request's Host header may name, or None to disable the
+    # check when the operator explicitly binds a non-loopback interface.
+    allowed_hostnames: frozenset[str] | None
 
 
 class AtlasViewerHandler(SimpleHTTPRequestHandler):
@@ -37,7 +43,31 @@ class AtlasViewerHandler(SimpleHTTPRequestHandler):
             directory=str(server.viewer_directory),
         )
 
+    def _host_rejected(self) -> bool:
+        """Reject requests whose Host header does not name this loopback
+        server. A loopback bind alone does not stop DNS-rebinding: a hostile
+        page can re-resolve its own hostname to 127.0.0.1 and read the API
+        as if it were same-origin unless the Host header is validated."""
+        allowed = self.server.allowed_hostnames
+        if allowed is None:
+            return False
+        try:
+            hostname = urlsplit(f"//{self.headers.get('Host', '')}").hostname
+        except ValueError:
+            hostname = None
+        if hostname in allowed:
+            return False
+        self.send_error(403, "Host header not allowed")
+        return True
+
+    def do_HEAD(self) -> None:  # noqa: N802 - inherited HTTP method name
+        if self._host_rejected():
+            return
+        super().do_HEAD()
+
     def do_GET(self) -> None:  # noqa: N802 - inherited HTTP method name
+        if self._host_rejected():
+            return
         if self.path == "/api/map":
             self._json(self.server.map_payload)
             return
@@ -107,6 +137,9 @@ def create_server(
 ) -> AtlasViewerServer:
     artifact = load_map(map_path)
     server = AtlasViewerServer((host, port), AtlasViewerHandler)
+    server.allowed_hostnames = (
+        _LOOPBACK_HOSTNAMES if host in _LOOPBACK_HOSTNAMES else None
+    )
     server.map_payload = json.dumps(
         artifact.model_dump(mode="json", exclude_none=True),
         ensure_ascii=False,

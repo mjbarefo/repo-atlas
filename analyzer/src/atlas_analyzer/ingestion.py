@@ -4,10 +4,24 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
-import tempfile
 from typing import Any
 
+from .artifact_io import atomic_write_text
 from .models import MapArtifact, TraceArtifact
+
+
+def _event_timestamp(event: dict[str, Any]) -> float:
+    try:
+        return float(event.get("timestamp", 0))
+    except (TypeError, ValueError):
+        return 0.0
+
+
+def _event_turn(event: dict[str, Any]) -> int:
+    try:
+        return int(event.get("turn", 0))
+    except (TypeError, ValueError):
+        return 0
 
 
 def _normalized_path(value: str, repo_root: Path) -> str:
@@ -57,7 +71,7 @@ def _deduplicated(events: list[dict[str, Any]]) -> list[dict[str, Any]]:
     return sorted(
         [*selected.values(), *anonymous],
         key=lambda item: (
-            float(item.get("timestamp", 0)),
+            _event_timestamp(item),
             int(item.get("_sequence", 0)),
         ),
     )
@@ -83,7 +97,7 @@ def ingest_events(
 ) -> TraceArtifact:
     events = _deduplicated(raw_events)
     file_index = _file_index(artifact)
-    first_timestamp = min(float(event.get("timestamp", 0)) for event in events)
+    first_timestamp = min(_event_timestamp(event) for event in events)
     resolved: list[dict[str, Any]] = []
     for event in events:
         path = _normalized_path(str(event.get("path") or ""), repo_root)
@@ -96,12 +110,12 @@ def ingest_events(
         details.pop("tool_use_id", None)
         resolved.append(
             {
-                "t": max(0.0, float(event.get("timestamp", 0)) - first_timestamp),
+                "t": max(0.0, _event_timestamp(event) - first_timestamp),
                 "tool": str(event.get("tool") or ""),
                 "path": path,
                 "node_id": node_id,
                 "detail": details,
-                "turn": max(0, int(event.get("turn", 0))),
+                "turn": max(0, _event_turn(event)),
             }
         )
 
@@ -143,23 +157,10 @@ def ingest_file(
 
 
 def write_trace(artifact: TraceArtifact, destination: Path) -> None:
-    destination.parent.mkdir(parents=True, exist_ok=True)
     payload = json.dumps(
         artifact.model_dump(mode="json"),
         ensure_ascii=False,
         indent=2,
         sort_keys=True,
     )
-    with tempfile.NamedTemporaryFile(
-        dir=destination.parent,
-        prefix=f".{destination.name}.",
-        suffix=".tmp",
-        mode="w",
-        delete=False,
-    ) as temporary_file:
-        temporary_file.write(payload + "\n")
-        temporary = Path(temporary_file.name)
-    try:
-        temporary.replace(destination)
-    finally:
-        temporary.unlink(missing_ok=True)
+    atomic_write_text(destination, payload + "\n")

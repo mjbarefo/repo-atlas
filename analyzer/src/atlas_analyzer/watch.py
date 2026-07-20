@@ -3,14 +3,34 @@
 from __future__ import annotations
 
 import asyncio
+from http import HTTPStatus
 import json
 from pathlib import Path
+import sys
 from typing import Any
+from urllib.parse import urlsplit
 
 from websockets.asyncio.server import ServerConnection, serve
+from websockets.http11 import Request, Response
 
 from .ingestion import ingest_file
 from .models import MapArtifact
+
+_LOOPBACK_HOSTNAMES = {"127.0.0.1", "localhost", "::1"}
+
+
+def _origin_allowed(origin: str | None) -> bool:
+    """Reject browser cross-origin connections; loopback pages and non-browser
+    clients (which send no Origin header) are allowed. Browsers do not apply
+    the same-origin policy to WebSocket connections, so without this check any
+    website open in a local browser could read the live trace."""
+    if origin is None:
+        return True
+    try:
+        parsed = urlsplit(origin)
+    except ValueError:
+        return False
+    return parsed.scheme in {"http", "https"} and parsed.hostname in _LOOPBACK_HOSTNAMES
 
 
 class TraceWatcher:
@@ -29,12 +49,19 @@ class TraceWatcher:
         self.clients: set[ServerConnection] = set()
         self.offset = raw_path.stat().st_size
 
-    def snapshot_message(self) -> str:
-        trace = ingest_file(
-            self.raw_path,
-            self.artifact,
-            repo_root=self.repo_root,
-        )
+    def snapshot_message(self) -> str | None:
+        """Return the current snapshot, or None when the raw log is empty or
+        contains records the ingester rejects; one bad line must not kill the
+        long-running watcher or every future client connection."""
+        try:
+            trace = ingest_file(
+                self.raw_path,
+                self.artifact,
+                repo_root=self.repo_root,
+            )
+        except (OSError, ValueError) as error:
+            print(f"atlas watch: snapshot skipped: {error}", file=sys.stderr)
+            return None
         return json.dumps(
             {
                 "type": "snapshot",
@@ -45,10 +72,19 @@ class TraceWatcher:
             sort_keys=True,
         )
 
+    def process_request(
+        self, connection: ServerConnection, request: Request
+    ) -> Response | None:
+        if not _origin_allowed(request.headers.get("Origin")):
+            return connection.respond(HTTPStatus.FORBIDDEN, "origin not allowed\n")
+        return None
+
     async def handler(self, connection: ServerConnection) -> None:
         self.clients.add(connection)
         try:
-            await connection.send(self.snapshot_message())
+            message = self.snapshot_message()
+            if message is not None:
+                await connection.send(message)
             await connection.wait_closed()
         finally:
             self.clients.discard(connection)
@@ -57,6 +93,8 @@ class TraceWatcher:
         if not self.clients:
             return
         message = self.snapshot_message()
+        if message is None:
+            return
         await asyncio.gather(
             *(client.send(message) for client in tuple(self.clients)),
             return_exceptions=True,
@@ -100,5 +138,7 @@ async def watch_trace(
     port: int,
 ) -> None:
     watcher = TraceWatcher(raw_path, artifact, repo_root=repo_root)
-    async with serve(watcher.handler, host, port):
+    async with serve(
+        watcher.handler, host, port, process_request=watcher.process_request
+    ):
         await watcher.tail()
