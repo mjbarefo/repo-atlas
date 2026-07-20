@@ -6,7 +6,6 @@ readme = "README.md"
 requires-python = ">=3.12,<3.13"
 dependencies = [
   "json5>=0.12",
-  "litellm>=1.77",
   "networkx>=3.6",
   "pathspec>=1.0",
   "pydantic>=2.10",
@@ -16,6 +15,11 @@ dependencies = [
   "tree-sitter-typescript>=0.23",
   "typer>=0.16",
   "websockets>=15",
+]
+
+[project.optional-dependencies]
+enrichment = [
+  "litellm>=1.77",
 ]
 
 [project.scripts]

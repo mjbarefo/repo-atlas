@@ -127,6 +127,13 @@ churn at query time, so repository history never changes the map artifact.
 
 ## Optional LLM enrichment
 
+Enrichment is the only feature that needs a model provider, so its `litellm`
+dependency is an optional extra that the default install skips entirely:
+
+```bash
+uv sync --no-editable --reinstall-package atlas-analyzer --extra enrichment
+```
+
 `atlas enrich` rewrites only module/component labels and summaries plus existing
 edge labels. The command rejects structural changes before atomically replacing
 an artifact. Pricing is explicit so the client can enforce the budget before
