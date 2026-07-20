@@ -5,17 +5,17 @@ description = "Static analysis and trace ingestion for ATLAS"
 readme = "README.md"
 requires-python = ">=3.12,<3.13"
 dependencies = [
-  "json5>=0.12,<1",
-  "litellm>=1.77,<2",
-  "networkx>=3.6,<4",
-  "pathspec>=1.0,<2",
-  "pydantic>=2.10,<3",
-  "tree-sitter>=0.25,<0.26",
-  "tree-sitter-javascript>=0.25,<0.26",
-  "tree-sitter-python>=0.25,<0.26",
-  "tree-sitter-typescript>=0.23,<0.24",
-  "typer>=0.16,<1",
-  "websockets>=15,<16",
+  "json5>=0.12",
+  "litellm>=1.77",
+  "networkx>=3.6",
+  "pathspec>=1.0",
+  "pydantic>=2.10",
+  "tree-sitter>=0.25",
+  "tree-sitter-javascript>=0.25",
+  "tree-sitter-python>=0.25",
+  "tree-sitter-typescript>=0.23",
+  "typer>=0.16",
+  "websockets>=15",
 ]
 
 [project.scripts]
@@ -23,11 +23,11 @@ atlas = "atlas_analyzer.cli:app"
 
 [dependency-groups]
 dev = [
-  "black>=26.3.1,<27",
-  "datamodel-code-generator>=0.31,<1",
-  "jsonschema[format]>=4.23,<5",
-  "pytest>=9.0.3,<10",
-  "ruff>=0.9,<1",
+  "black>=26.3.1",
+  "datamodel-code-generator>=0.31",
+  "jsonschema[format]>=4.23",
+  "pytest>=9.0.3",
+  "ruff>=0.9",
 ]
 
 [build-system]

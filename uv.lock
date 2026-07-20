@@ -142,26 +142,26 @@ dev = [
 
 [package.metadata]
 requires-dist = [
-    { name = "json5", specifier = ">=0.12,<1" },
-    { name = "litellm", specifier = ">=1.77,<2" },
-    { name = "networkx", specifier = ">=3.6,<4" },
-    { name = "pathspec", specifier = ">=1.0,<2" },
-    { name = "pydantic", specifier = ">=2.10,<3" },
-    { name = "tree-sitter", specifier = ">=0.25,<0.26" },
-    { name = "tree-sitter-javascript", specifier = ">=0.25,<0.26" },
-    { name = "tree-sitter-python", specifier = ">=0.25,<0.26" },
-    { name = "tree-sitter-typescript", specifier = ">=0.23,<0.24" },
-    { name = "typer", specifier = ">=0.16,<1" },
-    { name = "websockets", specifier = ">=15,<16" },
+    { name = "json5", specifier = ">=0.12" },
+    { name = "litellm", specifier = ">=1.77" },
+    { name = "networkx", specifier = ">=3.6" },
+    { name = "pathspec", specifier = ">=1.0" },
+    { name = "pydantic", specifier = ">=2.10" },
+    { name = "tree-sitter", specifier = ">=0.25" },
+    { name = "tree-sitter-javascript", specifier = ">=0.25" },
+    { name = "tree-sitter-python", specifier = ">=0.25" },
+    { name = "tree-sitter-typescript", specifier = ">=0.23" },
+    { name = "typer", specifier = ">=0.16" },
+    { name = "websockets", specifier = ">=15" },
 ]
 
 [package.metadata.requires-dev]
 dev = [
-    { name = "black", specifier = ">=26.3.1,<27" },
-    { name = "datamodel-code-generator", specifier = ">=0.31,<1" },
-    { name = "jsonschema", extras = ["format"], specifier = ">=4.23,<5" },
-    { name = "pytest", specifier = ">=9.0.3,<10" },
-    { name = "ruff", specifier = ">=0.9,<1" },
+    { name = "black", specifier = ">=26.3.1" },
+    { name = "datamodel-code-generator", specifier = ">=0.31" },
+    { name = "jsonschema", extras = ["format"], specifier = ">=4.23" },
+    { name = "pytest", specifier = ">=9.0.3" },
+    { name = "ruff", specifier = ">=0.9" },
 ]
 
 [[package]]
