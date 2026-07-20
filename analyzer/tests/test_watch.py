@@ -10,7 +10,6 @@ from websockets.asyncio.server import serve
 from atlas_analyzer.query import load_map
 from atlas_analyzer.watch import TraceWatcher
 
-
 ROOT = Path(__file__).resolve().parents[2]
 MAP_PATH = ROOT / "shared" / "fixtures" / "sample.map.json"
 

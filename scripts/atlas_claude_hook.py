@@ -12,7 +12,6 @@ import sys
 import time
 from typing import Any
 
-
 TEST_COMMAND = re.compile(
     r"(^|[;&|]\s*|\s)"
     r"(pytest|vitest|jest|mocha|tox|nox|cargo\s+test|go\s+test|"

@@ -27,7 +27,6 @@ from .query import dependencies, hotspots as find_hotspots, load_map
 from .serve import create_server
 from .watch import watch_trace
 
-
 app = typer.Typer(no_args_is_help=True)
 query_app = typer.Typer(no_args_is_help=True)
 app.add_typer(query_app, name="query", help="Query a completed map artifact.")

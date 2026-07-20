@@ -10,7 +10,6 @@ from atlas_analyzer.models import MapArtifact
 from .contracts import ClusterEnrichment, EdgeProse, NodeProse, SystemEnrichment
 from .provider import BudgetedEnrichmentClient, EnrichmentResponseError
 
-
 SYSTEM_PROMPT = """You improve labels and summaries for a parser-derived code map.
 Return only the requested structured response. Preserve every supplied ID.
 Do not invent modules, components, dependencies, or implementation facts."""

@@ -14,7 +14,6 @@ from atlas_analyzer.analysis.languages import parse_file
 from atlas_analyzer.analysis.repository import source_files
 from atlas_analyzer.cli import app
 
-
 FIXTURE = Path(__file__).parent / "fixtures" / "golden_repo"
 RUNNER = CliRunner()
 

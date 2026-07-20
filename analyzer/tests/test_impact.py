@@ -11,7 +11,6 @@ from atlas_analyzer.analysis.analyzer import analyze_repository, write_map
 from atlas_analyzer.cli import app
 from atlas_analyzer.impact import build_impact, changed_files, write_impact
 
-
 RUNNER = CliRunner()
 
 

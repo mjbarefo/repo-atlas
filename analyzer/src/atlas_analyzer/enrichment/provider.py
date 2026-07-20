@@ -11,7 +11,6 @@ from typing import Any, Protocol, TypeVar
 
 from pydantic import BaseModel
 
-
 ResponseModel = TypeVar("ResponseModel", bound=BaseModel)
 
 

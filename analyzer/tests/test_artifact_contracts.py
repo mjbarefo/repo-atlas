@@ -11,7 +11,6 @@ from jsonschema.exceptions import ValidationError
 
 from atlas_analyzer.models import ImpactArtifact, MapArtifact, TraceArtifact
 
-
 ROOT = Path(__file__).resolve().parents[2]
 SCHEMAS = ROOT / "shared" / "schemas"
 FIXTURES = ROOT / "shared" / "fixtures"

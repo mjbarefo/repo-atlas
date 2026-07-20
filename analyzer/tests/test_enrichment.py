@@ -26,7 +26,6 @@ from atlas_analyzer.enrichment.contracts import (
 )
 from atlas_analyzer.models import MapArtifact
 
-
 FIXTURE = Path(__file__).parent / "fixtures" / "golden_repo"
 RUNNER = CliRunner()
 

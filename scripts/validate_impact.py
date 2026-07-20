@@ -12,7 +12,6 @@ import tempfile
 from atlas_analyzer.analysis.analyzer import analyze_repository
 from atlas_analyzer.impact import build_impact, write_impact
 
-
 STATUS = {
     "A": "added",
     "M": "modified",

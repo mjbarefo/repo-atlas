@@ -7,7 +7,6 @@ from urllib.request import urlopen
 
 from atlas_analyzer.serve import create_server
 
-
 ROOT = Path(__file__).resolve().parents[2]
 
 

@@ -8,7 +8,6 @@ import sys
 import tempfile
 from pathlib import Path
 
-
 ROOT = Path(__file__).resolve().parents[1]
 SCHEMA_DIR = ROOT / "shared" / "schemas"
 OUTPUT_DIR = ROOT / "analyzer" / "src" / "atlas_analyzer" / "models"

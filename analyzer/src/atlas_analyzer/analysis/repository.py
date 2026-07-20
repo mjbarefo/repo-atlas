@@ -10,7 +10,6 @@ from pathspec import GitIgnoreSpec
 from .facts import ImportFact
 from .languages import classify
 
-
 IGNORED_DIRECTORIES = {
     ".atlas",
     ".git",

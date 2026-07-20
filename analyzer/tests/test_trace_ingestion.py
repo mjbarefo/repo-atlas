@@ -12,7 +12,6 @@ from atlas_analyzer.cli import app
 from atlas_analyzer.ingestion import ingest_file, write_trace
 from atlas_analyzer.query import load_map
 
-
 ROOT = Path(__file__).resolve().parents[2]
 HOOK = ROOT / "scripts" / "atlas_claude_hook.py"
 MAP_PATH = ROOT / "shared" / "fixtures" / "sample.map.json"

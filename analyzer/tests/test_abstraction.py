@@ -8,7 +8,6 @@ from atlas_analyzer.analysis.analyzer import analyze_repository, write_map
 from atlas_analyzer.cli import app
 from atlas_analyzer.query import cycles, dependencies, hotspots
 
-
 FIXTURE = Path(__file__).parent / "fixtures" / "golden_repo"
 RUNNER = CliRunner()
 

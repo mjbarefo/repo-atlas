@@ -12,7 +12,6 @@ import tree_sitter_typescript
 
 from .facts import ImportFact, SymbolTable
 
-
 LANGUAGE_BY_SUFFIX = {
     ".py": "python",
     ".js": "javascript",

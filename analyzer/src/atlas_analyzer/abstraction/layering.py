@@ -12,7 +12,6 @@ import networkx as nx
 
 from atlas_analyzer.models import MapArtifact
 
-
 CROSS_DIRECTORY_DENSITY = 0.35
 GENERIC_DIRECTORIES = {
     ".",

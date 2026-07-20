@@ -10,7 +10,6 @@ import sys
 import tomllib
 from typing import Iterator
 
-
 ENVIRONMENT_KEY = re.compile(r"^[A-Z_][A-Z0-9_]*$")
 
 

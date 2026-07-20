@@ -22,7 +22,6 @@ from atlas_analyzer.enrichment.contracts import (
     SystemEnrichment,
 )
 
-
 FIXTURE = Path(__file__).parent / "fixtures" / "golden_repo"
 RUNNER = CliRunner()
 
