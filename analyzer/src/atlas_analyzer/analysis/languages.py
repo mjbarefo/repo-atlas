@@ -131,6 +131,10 @@ def _javascript_facts(
             if name:
                 definitions.append(name)
         elif node.type == "import_statement":
+            # `import type {...} from 'x'` is erased at compile time; it is not a
+            # runtime dependency, so it must not produce an edge.
+            if re.match(r"import\s+type\b", _text(node, source)):
+                continue
             module = _text(node.child_by_field_name("source"), source).strip("'\"")
             if module:
                 imports.append(
@@ -145,15 +149,19 @@ def _javascript_facts(
             )
             if name:
                 exports.append(name)
+            if re.match(r"export\s+type\b", _text(node, source)):
+                continue
             module = _text(node.child_by_field_name("source"), source).strip("'\"")
             if module:
                 imports.append(
                     ImportFact(module, node.start_point.row + 1, symbols=symbols(node))
                 )
         elif node.type == "call_expression":
+            # Capture both CommonJS require('x') and dynamic import('x'); the
+            # latter parses as a call whose function is the `import` keyword.
             function = _text(node.child_by_field_name("function"), source)
             arguments = node.child_by_field_name("arguments")
-            if function == "require" and arguments:
+            if function in {"require", "import"} and arguments:
                 strings = [
                     child
                     for child in arguments.named_children
@@ -164,9 +172,7 @@ def _javascript_facts(
                         ImportFact(
                             _text(strings[0], source).strip("'\""),
                             node.start_point.row + 1,
-                            symbols=(
-                                Path(_text(strings[0], source).strip("'\"")).stem,
-                            ),
+                            symbols=(),
                         )
                     )
     return definitions, imports, exports

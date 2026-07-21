@@ -99,6 +99,95 @@ def test_python_package_and_relative_module_resolution(tmp_path: Path) -> None:
     }
 
 
+def test_bare_stdlib_import_does_not_resolve_to_local_shadow(tmp_path: Path) -> None:
+    repo = tmp_path / "repo"
+    (repo / "app").mkdir(parents=True)
+    (repo / "logging.py").write_text("def setup() -> None:\n    pass\n")
+    (repo / "app" / "main.py").write_text(
+        "import logging\n\nlogging.getLogger(__name__)\n"
+    )
+
+    artifact = analyze_file_graph(repo)
+
+    assert all(edge.target != "file:logging.py" for edge in artifact.edges)
+
+
+def test_from_import_drops_edge_to_same_named_file_missing_the_symbol(
+    tmp_path: Path,
+) -> None:
+    repo = tmp_path / "repo"
+    (repo / "pkg_a").mkdir(parents=True)
+    (repo / "pkg_b").mkdir(parents=True)
+    (repo / "pkg_a" / "utils.py").write_text("def shared_helper():\n    return 1\n")
+    (repo / "pkg_b" / "utils.py").write_text("def only_in_b():\n    return 2\n")
+    (repo / "pkg_b" / "service.py").write_text("from utils import shared_helper\n")
+
+    artifact = analyze_file_graph(repo)
+
+    # pkg_b/utils.py does not define shared_helper, so the edge is dropped rather
+    # than pointed at the wrong same-named file.
+    assert (
+        "file:pkg_b/service.py",
+        "file:pkg_b/utils.py",
+    ) not in {(edge.source, edge.target) for edge in artifact.edges}
+
+
+def test_barrel_reexport_points_at_the_defining_module(tmp_path: Path) -> None:
+    repo = tmp_path / "repo"
+    lib = repo / "lib"
+    lib.mkdir(parents=True)
+    (lib / "__init__.py").write_text("from lib.core import build\n")
+    (lib / "core.py").write_text("def build():\n    return 1\n")
+    (repo / "consumer.py").write_text("from lib import build\n")
+
+    artifact = analyze_file_graph(repo)
+    edges = {(edge.source, edge.target) for edge in artifact.edges}
+
+    assert ("file:consumer.py", "file:lib/core.py") in edges
+    assert ("file:consumer.py", "file:lib/__init__.py") not in edges
+
+
+def test_src_layout_package_resolves_from_outside(tmp_path: Path) -> None:
+    repo = tmp_path / "repo"
+    package = repo / "analyzer" / "src" / "mypkg"
+    package.mkdir(parents=True)
+    (package / "__init__.py").write_text("")
+    (package / "core.py").write_text("def entry():\n    return 1\n")
+    (repo / "scripts").mkdir()
+    (repo / "scripts" / "run.py").write_text("from mypkg.core import entry\n")
+
+    artifact = analyze_file_graph(repo)
+
+    assert (
+        "file:scripts/run.py",
+        "file:analyzer/src/mypkg/core.py",
+    ) in {(edge.source, edge.target) for edge in artifact.edges}
+
+
+def test_javascript_dynamic_import_captured_and_type_only_excluded(
+    tmp_path: Path,
+) -> None:
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    (repo / "a.ts").write_text("export const A = 1;\n")
+    (repo / "t.ts").write_text("export type T = number;\n")
+    (repo / "b.ts").write_text("export const B = 2;\n")
+    (repo / "main.ts").write_text(
+        'import { A } from "./a";\n'
+        'import type { T } from "./t";\n'
+        "async function go() {\n"
+        '  return await import("./b");\n'
+        "}\n"
+    )
+
+    artifact = analyze_file_graph(repo)
+    edges = {(edge.source, edge.target) for edge in artifact.edges}
+
+    assert ("file:main.ts", "file:a.ts") in edges  # static import kept
+    assert ("file:main.ts", "file:b.ts") in edges  # dynamic import() captured
+    assert ("file:main.ts", "file:t.ts") not in edges  # type-only erased
+
+
 def test_analysis_is_deterministic_and_edges_have_source_evidence(
     tmp_path: Path,
 ) -> None:
