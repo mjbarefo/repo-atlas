@@ -12,7 +12,6 @@ import networkx as nx
 
 from atlas_analyzer.models import MapArtifact
 
-CROSS_DIRECTORY_DENSITY = 0.35
 GENERIC_DIRECTORIES = {
     ".",
     "app",
@@ -86,27 +85,12 @@ def _directory_constrained_communities(
         grouped: dict[str, list[str]] = defaultdict(list)
         for node in sorted(community):
             grouped[anchors[node]].append(node)
-        if len(grouped) == 1:
-            constrained.append(sorted(community))
-            continue
-
-        groups = list(sorted(grouped.items()))
-        possible = 0
-        crossing = 0
-        for index, (_, left) in enumerate(groups):
-            for _, right in groups[index + 1 :]:
-                possible += len(left) * len(right)
-                crossing += sum(
-                    1
-                    for source in left
-                    for target in right
-                    if graph.has_edge(source, target)
-                )
-        density = crossing / possible if possible else 0
-        if density >= CROSS_DIRECTORY_DENSITY:
-            constrained.append(sorted(community))
-        else:
-            constrained.extend(nodes for _, nodes in groups)
+        # A module or component never spans more than one anchor. Each anchor a
+        # Louvain community touches becomes its own group, so genuine
+        # cross-directory coupling survives as edges rather than shared
+        # membership (a single-anchor community is unchanged).
+        for _, nodes in sorted(grouped.items()):
+            constrained.append(sorted(nodes))
 
     orphans: dict[str, list[str]] = defaultdict(list)
     for node in sorted(isolated):
@@ -131,6 +115,26 @@ def _directory_constrained_communities(
     return sorted(tuple(community) for community in constrained)
 
 
+def _merge_by_common_directory(
+    communities: list[tuple[str, ...]],
+    path_by_node: dict[str, str],
+) -> list[tuple[str, ...]]:
+    """Re-merge communities that resolve to the same common (leaf) directory.
+
+    Louvain can split one leaf package into several communities; grouping them
+    back by their shared directory keeps a single package a single module
+    (instead of ``Foo`` / ``Foo 2``), while distinct directories stay separate so
+    genuine cross-directory coupling survives as edges rather than membership.
+    Two communities with an identical common directory necessarily share the
+    same anchor, so this never fuses across anchors.
+    """
+    grouped: dict[str, list[str]] = defaultdict(list)
+    for community in communities:
+        key = _common_directory([path_by_node[node] for node in community])
+        grouped[key].extend(community)
+    return sorted(tuple(sorted(members)) for members in grouped.values())
+
+
 def _title(value: str) -> str:
     words = re.sub(r"[^A-Za-z0-9]+", " ", value).strip().split()
     return " ".join(word.upper() if len(word) <= 2 else word.title() for word in words)
@@ -149,9 +153,9 @@ def _base_label(
         return _title(PurePosixPath(paths[0]).stem)
 
     common = _common_directory(paths)
-    candidate = PurePosixPath(common).name
-    if candidate and candidate.lower() not in GENERIC_DIRECTORIES:
-        return _title(candidate)
+    for segment in reversed(PurePosixPath(common).parts):
+        if segment and segment.lower() not in GENERIC_DIRECTORIES:
+            return _title(segment)
 
     ranked = sorted(
         paths,
@@ -164,11 +168,56 @@ def _base_label(
     return _title(PurePosixPath(ranked[0]).stem)
 
 
-def _deduplicate_labels(labels: list[str]) -> list[str]:
+def _distinguishing_segment(common: str, siblings: list[str]) -> str:
+    """The nearest common-directory segment that sets ``common`` apart from the
+    colliding ``siblings``.
+
+    Walk up from the shared leaf so ``alpha/api`` and ``beta/api`` disambiguate
+    on ``alpha`` / ``beta`` rather than the shared ``api``.
+    """
+    parts = PurePosixPath(common).parts
+    sibling_parts = [PurePosixPath(sibling).parts for sibling in siblings]
+    shared = 0
+    while all(
+        len(parts) > shared
+        and len(other) > shared
+        and other[-1 - shared] == parts[-1 - shared]
+        for other in sibling_parts
+    ):
+        shared += 1
+    remainder = parts[: len(parts) - shared] if shared < len(parts) else parts
+    if remainder:
+        return remainder[-1]
+    return parts[-1] if parts else ""
+
+
+def _deduplicate_labels(labels: list[str], common_dirs: list[str]) -> list[str]:
+    """Give every layer a unique label.
+
+    Genuine base-label collisions (distinct directories that share a leaf name)
+    are disambiguated by the distinguishing path segment, so ``Api`` / ``Api``
+    become ``Api / Alpha`` / ``Api / Beta``. A bare numeric counter is only a
+    last-resort safety net, keeping the result unique and deterministic even if
+    a segment cannot separate two labels.
+    """
+    groups: dict[str, list[int]] = defaultdict(list)
+    for index, label in enumerate(labels):
+        groups[label].append(index)
+
+    resolved = list(labels)
+    for label, indices in groups.items():
+        if len(indices) == 1:
+            continue
+        for index in indices:
+            siblings = [common_dirs[other] for other in indices if other != index]
+            segment = _distinguishing_segment(common_dirs[index], siblings)
+            if segment:
+                resolved[index] = f"{label} / {_title(segment)}"
+
     used: set[str] = set()
     next_suffix: dict[str, int] = defaultdict(lambda: 2)
     result: list[str] = []
-    for label in labels:
+    for label in resolved:
         candidate = label
         while candidate in used:
             candidate = f"{label} {next_suffix[label]}"
@@ -340,12 +389,14 @@ def build_layered_map(file_map: MapArtifact, root: Path) -> MapArtifact:
         file_graph,
         {node_id: _module_anchor(path) for node_id, path in source_paths.items()},
     )
+    module_communities = _merge_by_common_directory(module_communities, source_paths)
     module_paths = [
         sorted(source_paths[node_id] for node_id in community)
         for community in module_communities
     ]
     module_labels = _deduplicate_labels(
-        [_base_label(paths, source_file_nodes) for paths in module_paths]
+        [_base_label(paths, source_file_nodes) for paths in module_paths],
+        [_common_directory(paths) for paths in module_paths],
     )
 
     modules: list[dict[str, Any]] = []
@@ -393,7 +444,10 @@ def build_layered_map(file_map: MapArtifact, root: Path) -> MapArtifact:
             component_base_labels.append(module_nodes[community[0]]["label"])
         else:
             component_base_labels.append(_base_label(paths, source_file_nodes))
-    component_labels = _deduplicate_labels(component_base_labels)
+    component_labels = _deduplicate_labels(
+        component_base_labels,
+        [_common_directory(paths) for paths in component_paths],
+    )
 
     components: list[dict[str, Any]] = []
     component_by_module: dict[str, str] = {}
