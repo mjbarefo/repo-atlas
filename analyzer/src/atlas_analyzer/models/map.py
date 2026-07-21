@@ -17,6 +17,22 @@ from pydantic import (
 )
 
 
+class SupportedEdgeKind(Enum):
+    imports = 'imports'
+    calls = 'calls'
+    inherits = 'inherits'
+
+
+class Capabilities(BaseModel):
+    model_config = ConfigDict(
+        extra='forbid',
+    )
+    supported_edge_kinds: list[SupportedEdgeKind] = Field(
+        ...,
+        description="Edge kinds the analyzer actually emits. A kind present in an edge's `kind` enum but absent here is declared in the contract but not yet produced.",
+    )
+
+
 class Repository(BaseModel):
     model_config = ConfigDict(
         extra='forbid',
@@ -31,8 +47,14 @@ class Metrics(BaseModel):
         extra='forbid',
     )
     loc: conint(ge=0)
-    fan_in: conint(ge=0)
-    fan_out: conint(ge=0)
+    fan_in: conint(ge=0) = Field(
+        ...,
+        description='Count of distinct nodes that depend on this node (a neighbor count, not import volume; see edge `weight` for volume).',
+    )
+    fan_out: conint(ge=0) = Field(
+        ...,
+        description='Count of distinct nodes this node depends on (a neighbor count, not import volume; see edge `weight` for volume).',
+    )
 
 
 class Kind(Enum):
@@ -102,6 +124,10 @@ class Edge(BaseModel):
     target: constr(min_length=1)
     kind: Kind1
     evidence: list[Evidence] = Field(..., min_length=1)
+    weight: conint(ge=1) | None = Field(
+        None,
+        description='Number of distinct import sites backing this edge (equal to the count of evidence entries).',
+    )
     label: str | None = None
 
 
@@ -135,3 +161,4 @@ class MapArtifact(BaseModel):
     nodes: list[Node]
     edges: list[Edge]
     levels: Levels
+    capabilities: Capabilities | None = None

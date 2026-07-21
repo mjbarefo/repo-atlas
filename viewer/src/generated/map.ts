@@ -14,6 +14,7 @@ export interface MapArtifact {
   nodes: Node[];
   edges: Edge[];
   levels: Levels;
+  capabilities?: Capabilities;
 }
 export interface Repository {
   root: string;
@@ -36,7 +37,13 @@ export interface Node {
 }
 export interface Metrics {
   loc: number;
+  /**
+   * Count of distinct nodes that depend on this node (a neighbor count, not import volume; see edge `weight` for volume).
+   */
   fan_in: number;
+  /**
+   * Count of distinct nodes this node depends on (a neighbor count, not import volume; see edge `weight` for volume).
+   */
   fan_out: number;
 }
 export interface Edge {
@@ -47,6 +54,10 @@ export interface Edge {
    * @minItems 1
    */
   evidence: [Evidence, ...Evidence[]];
+  /**
+   * Number of distinct import sites backing this edge (equal to the count of evidence entries).
+   */
+  weight?: number;
   label?: string;
 }
 export interface Evidence {
@@ -61,4 +72,10 @@ export interface Levels {
   module: {
     [k: string]: string[];
   };
+}
+export interface Capabilities {
+  /**
+   * Edge kinds the analyzer actually emits. A kind present in an edge's `kind` enum but absent here is declared in the contract but not yet produced.
+   */
+  supported_edge_kinds: ("imports" | "calls" | "inherits")[];
 }

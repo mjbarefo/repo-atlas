@@ -17,9 +17,23 @@
       "type": "array",
       "items": { "$ref": "#/$defs/edge" }
     },
-    "levels": { "$ref": "#/$defs/levels" }
+    "levels": { "$ref": "#/$defs/levels" },
+    "capabilities": { "$ref": "#/$defs/capabilities" }
   },
   "$defs": {
+    "capabilities": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["supported_edge_kinds"],
+      "properties": {
+        "supported_edge_kinds": {
+          "description": "Edge kinds the analyzer actually emits. A kind present in an edge's `kind` enum but absent here is declared in the contract but not yet produced.",
+          "type": "array",
+          "items": { "enum": ["imports", "calls", "inherits"] },
+          "uniqueItems": true
+        }
+      }
+    },
     "repository": {
       "type": "object",
       "additionalProperties": false,
@@ -36,8 +50,16 @@
       "required": ["loc", "fan_in", "fan_out"],
       "properties": {
         "loc": { "type": "integer", "minimum": 0 },
-        "fan_in": { "type": "integer", "minimum": 0 },
-        "fan_out": { "type": "integer", "minimum": 0 }
+        "fan_in": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Count of distinct nodes that depend on this node (a neighbor count, not import volume; see edge `weight` for volume)."
+        },
+        "fan_out": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Count of distinct nodes this node depends on (a neighbor count, not import volume; see edge `weight` for volume)."
+        }
       }
     },
     "node": {
@@ -98,6 +120,11 @@
           "type": "array",
           "minItems": 1,
           "items": { "$ref": "#/$defs/evidence" }
+        },
+        "weight": {
+          "description": "Number of distinct import sites backing this edge (equal to the count of evidence entries).",
+          "type": "integer",
+          "minimum": 1
         },
         "label": { "type": "string" }
       }
