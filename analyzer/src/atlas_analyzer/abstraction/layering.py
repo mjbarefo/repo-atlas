@@ -1,7 +1,7 @@
 """Build deterministic module and component layers over the file graph."""
 
 import ast
-from collections import defaultdict
+from collections import Counter, defaultdict
 import hashlib
 import posixpath
 from pathlib import Path, PurePosixPath
@@ -227,18 +227,50 @@ def _deduplicate_labels(labels: list[str], common_dirs: list[str]) -> list[str]:
     return result
 
 
-def _node_id(prefix: str, label: str, children: tuple[str, ...]) -> str:
-    slug = re.sub(r"[^a-z0-9]+", "-", label.lower()).strip("-")[:32] or prefix
-    digest = hashlib.sha256("\0".join(children).encode()).hexdigest()[:10]
+def _id_from(prefix: str, slug_source: str, digest_source: str) -> str:
+    slug = re.sub(r"[^a-z0-9]+", "-", slug_source.lower()).strip("-")[:40] or prefix
+    digest = hashlib.sha256(digest_source.encode()).hexdigest()[:10]
     return f"{prefix}:{slug}-{digest}"
 
 
-def _first_docstring(root: Path, paths: list[str]) -> str | None:
-    python_paths = sorted(
-        (path for path in paths if path.endswith(".py")),
-        key=lambda path: (PurePosixPath(path).name != "__init__.py", path),
+def _layer_node_ids(
+    prefix: str,
+    keys: list[str],
+    children: list[tuple[str, ...]],
+) -> list[str]:
+    """Assign stable, unique ids for one layer.
+
+    Ids key on ``keys`` — a directory identity (a module's common directory, a
+    component's common directory) that survives membership churn, so adding or
+    moving a file no longer re-hashes the id. Directory keys are unique per node
+    after the same-directory re-merge; on the rare collision the colliding nodes
+    fall back to hashing their child set so ids stay globally unique and
+    deterministic.
+    """
+    counts = Counter(keys)
+    ids: list[str] = []
+    for key, child_set in zip(keys, children, strict=True):
+        digest_source = key if counts[key] == 1 else "\0".join(child_set)
+        ids.append(_id_from(prefix, key or prefix, digest_source))
+    return ids
+
+
+def _package_docstring(root: Path, paths: list[str]) -> str | None:
+    """First docstring of the group's package entry point (``__init__.py`` or
+    ``index``).
+
+    A non-entry file never speaks for the whole group — those fall back to the
+    generated aggregate summary — so one file's docstring can no longer stand in
+    for many (the old "Scripts summarized by one hook" behaviour). Keying only on
+    entry files also stays a pure function of the group's own paths, so the
+    incremental refresh cannot diverge from a full rebuild.
+    """
+    entries = sorted(
+        path
+        for path in paths
+        if path.endswith(".py") and PurePosixPath(path).stem in {"__init__", "index"}
     )
-    for relative in python_paths:
+    for relative in entries:
         try:
             module = ast.parse((root / relative).read_text())
         except (OSError, SyntaxError, UnicodeDecodeError):
@@ -303,13 +335,27 @@ def _export_names(root: Path, paths: list[str]) -> list[str]:
 
 
 def _summary(root: Path, paths: list[str], loc: int) -> str:
-    extracted = _first_docstring(root, paths) or _readme_heading(root, paths)
+    extracted = _package_docstring(root, paths) or _readme_heading(root, paths)
     if extracted:
         return extracted[:240]
     exports = _export_names(root, paths)
     exported = f"; exports {', '.join(exports)}" if exports else ""
     noun = "file" if len(paths) == 1 else "files"
     return f"{len(paths)} {noun}, {loc} LOC{exported}."
+
+
+def _rolled_label(symbols: set[str]) -> str | None:
+    """Render a rolled edge's symbol union, honestly signalling any overflow.
+
+    Shows the first five symbols and, when more exist, ``(+N more)`` instead of
+    silently dropping them.
+    """
+    names = sorted(symbols)
+    if not names:
+        return None
+    if len(names) <= 5:
+        return ", ".join(names)
+    return f"{', '.join(names[:5])} (+{len(names) - 5} more)"
 
 
 def _rolled_edges(
@@ -341,7 +387,8 @@ def _rolled_edges(
                 {"file": file, "line": line}
                 for file, line in sorted(evidence[(source, target)])
             ],
-            "label": ", ".join(sorted(symbols[(source, target)])[:5]) or None,
+            "weight": len(evidence[(source, target)]),
+            "label": _rolled_label(symbols[(source, target)]),
         }
         for source, target in sorted(evidence)
     ]
@@ -394,18 +441,19 @@ def build_layered_map(file_map: MapArtifact, root: Path) -> MapArtifact:
         sorted(source_paths[node_id] for node_id in community)
         for community in module_communities
     ]
+    module_common_dirs = [_common_directory(paths) for paths in module_paths]
     module_labels = _deduplicate_labels(
         [_base_label(paths, source_file_nodes) for paths in module_paths],
-        [_common_directory(paths) for paths in module_paths],
+        module_common_dirs,
     )
+    module_ids = _layer_node_ids("mod", module_common_dirs, module_communities)
 
     modules: list[dict[str, Any]] = []
     module_by_file: dict[str, str] = {}
     paths_by_module: dict[str, list[str]] = {}
-    for community, paths, label in zip(
-        module_communities, module_paths, module_labels, strict=True
+    for community, paths, label, module_id in zip(
+        module_communities, module_paths, module_labels, module_ids, strict=True
     ):
-        module_id = _node_id("mod", label, community)
         loc = sum(source_file_nodes[node_id]["metrics"]["loc"] for node_id in community)
         modules.append(
             {
@@ -444,20 +492,24 @@ def build_layered_map(file_map: MapArtifact, root: Path) -> MapArtifact:
             component_base_labels.append(module_nodes[community[0]]["label"])
         else:
             component_base_labels.append(_base_label(paths, source_file_nodes))
+    component_common_dirs = [_common_directory(paths) for paths in component_paths]
     component_labels = _deduplicate_labels(
         component_base_labels,
-        [_common_directory(paths) for paths in component_paths],
+        component_common_dirs,
+    )
+    component_ids = _layer_node_ids(
+        "comp", component_common_dirs, component_communities
     )
 
     components: list[dict[str, Any]] = []
     component_by_module: dict[str, str] = {}
-    for community, paths, label in zip(
+    for community, paths, label, component_id in zip(
         component_communities,
         component_paths,
         component_labels,
+        component_ids,
         strict=True,
     ):
-        component_id = _node_id("comp", label, community)
         loc = sum(module_nodes[node_id]["metrics"]["loc"] for node_id in community)
         components.append(
             {
@@ -474,7 +526,14 @@ def build_layered_map(file_map: MapArtifact, root: Path) -> MapArtifact:
         )
         component_by_module.update((node_id, component_id) for node_id in community)
 
-    component_edges = _rolled_edges(module_edges, component_by_module)
+    # Roll component edges straight from file edges (not the already-truncated
+    # module edge labels) so the component symbol union is complete and rendered
+    # with a single honest overflow marker.
+    component_by_file = {
+        file_id: component_by_module[module_id]
+        for file_id, module_id in module_by_file.items()
+    }
+    component_edges = _rolled_edges(file_edges, component_by_file)
     _layer_metrics(components, component_edges)
 
     payload["nodes"] = [
@@ -596,7 +655,14 @@ def refresh_layered_map(
         components.append(component)
         component_by_module.update((node_id, component["id"]) for node_id in children)
 
-    component_edges = _rolled_edges(module_edges, component_by_module)
+    # Roll component edges straight from file edges (not the already-truncated
+    # module edge labels) so the component symbol union is complete and rendered
+    # with a single honest overflow marker.
+    component_by_file = {
+        file_id: component_by_module[module_id]
+        for file_id, module_id in module_by_file.items()
+    }
+    component_edges = _rolled_edges(file_edges, component_by_file)
     _layer_metrics(components, component_edges)
     payload["nodes"] = [
         *sorted(components, key=lambda item: item["id"]),

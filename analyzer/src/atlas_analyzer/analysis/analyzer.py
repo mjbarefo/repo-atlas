@@ -192,6 +192,7 @@ def analyze_file_graph(
                 {"file": file, "line": line}
                 for file, line in sorted(edge_evidence[(source, target)])
             ],
+            "weight": len(edge_evidence[(source, target)]),
             "label": ", ".join(sorted(edge_symbols[(source, target)])) or None,
         }
         for source, target in sorted(edge_evidence)
@@ -204,6 +205,7 @@ def analyze_file_graph(
             "nodes": nodes,
             "edges": edges,
             "levels": {"system": [], "component": {}, "module": {}},
+            "capabilities": {"supported_edge_kinds": ["imports"]},
         }
     )
 
@@ -358,6 +360,11 @@ def _incremental_file_graph(
         node["metrics"]["fan_out"] = fan_out[node_id]
         nodes.append(node)
 
+    # Weight is a pure function of evidence; recompute it (rather than trust a
+    # reused edge) so incremental output matches a full run even against a
+    # baseline produced before this field existed.
+    for edge in edges:
+        edge["weight"] = len(edge["evidence"])
     commit, generated_at = _repository_identity(root, files)
     return MapArtifact.model_validate(
         {
@@ -368,6 +375,7 @@ def _incremental_file_graph(
                 edges, key=lambda edge: (edge["source"], edge["target"], edge["kind"])
             ),
             "levels": {"system": [], "component": {}, "module": {}},
+            "capabilities": {"supported_edge_kinds": ["imports"]},
         }
     )
 

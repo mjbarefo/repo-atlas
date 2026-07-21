@@ -198,6 +198,133 @@ def test_colliding_labels_disambiguated_by_path_segment_not_counter(
     assert "beta" in lowered
 
 
+def test_edges_carry_import_weight(tmp_path: Path) -> None:
+    # Every edge (file and rolled) reports a weight equal to its distinct import
+    # sites, so import volume is visible instead of a bare neighbor count.
+    repo = _make_repo(
+        tmp_path / "repo",
+        {
+            "alpha/client.py": "from beta.api import run\nfrom beta.api import stop\n",
+            "beta/api.py": "def run():\n    return 1\n\n\ndef stop():\n    return 2\n",
+        },
+    )
+
+    artifact = analyze_repository(repo)
+
+    assert artifact.edges
+    for edge in artifact.edges:
+        assert edge.weight == len(edge.evidence)
+        assert edge.weight >= 1
+
+
+def test_map_declares_supported_edge_kinds(tmp_path: Path) -> None:
+    # The contract honestly advertises which edge kinds are actually produced.
+    repo = _make_repo(
+        tmp_path / "repo",
+        {"pkg/a.py": "from pkg import b\n", "pkg/b.py": "VALUE = 1\n"},
+    )
+
+    artifact = analyze_repository(repo)
+
+    assert [kind.value for kind in artifact.capabilities.supported_edge_kinds] == [
+        "imports"
+    ]
+    assert {edge.kind.value for edge in artifact.edges} <= {"imports"}
+
+
+def test_rolled_label_shows_overflow_count(tmp_path: Path) -> None:
+    # A rolled edge that unions more than five symbols shows the first five plus
+    # an honest "(+N more)" instead of silently dropping the rest.
+    repo = _make_repo(
+        tmp_path / "repo",
+        {
+            "alpha/client.py": "from beta.api import a, b, c, d, e, f, g\n",
+            "beta/api.py": "".join(
+                f"def {name}():\n    return 0\n\n\n" for name in "abcdefg"
+            ),
+        },
+    )
+
+    artifact = analyze_repository(repo)
+    rolled = [edge for edge in artifact.edges if not edge.source.startswith("file:")]
+    overflow = [edge for edge in rolled if edge.label and "(+" in edge.label]
+
+    assert overflow, "expected a rolled edge with an overflow label"
+    # Every rolled level (module and component) must carry a single, well-formed
+    # overflow marker — never a doubled "(+1 more) (+5 more)" from re-parsing an
+    # already-truncated child label.
+    for edge in overflow:
+        label = edge.label
+        assert label.count("(+") == 1
+        assert label.endswith(" more)")
+        head, _, tail = label.partition(" (+")
+        head_symbols = [s.strip() for s in head.split(",") if s.strip()]
+        assert len(head_symbols) == 5
+        assert all("(" not in s and ")" not in s for s in head_symbols)
+        assert tail == "2 more)"  # 7 symbols -> 5 shown + 2 more
+
+
+def test_package_init_docstring_is_the_summary(tmp_path: Path) -> None:
+    # A package entry point (__init__) legitimately describes the whole group, so
+    # its docstring is the summary.
+    repo = _make_repo(
+        tmp_path / "repo",
+        {
+            "widget/__init__.py": '"""The widget package."""\n',
+            "widget/core.py": '"""Core internals."""\n\n\ndef run():\n    return 1\n',
+            "widget/user.py": "from .core import run\n",
+        },
+    )
+
+    artifact = analyze_repository(repo)
+    module = next(node for node in artifact.nodes if node.kind.value == "module")
+
+    assert module.summary == "The widget package."
+
+
+def test_summary_without_package_init_uses_generated_form(tmp_path: Path) -> None:
+    # With no package __init__, no single file's docstring may speak for the whole
+    # group; the summary is the generated aggregate form, not the alphabetically
+    # first file's docstring.
+    repo = _make_repo(
+        tmp_path / "repo",
+        {
+            "widget/aaa.py": '"""Alphabetically first, unimportant."""\n',
+            "widget/core.py": '"""The widget core engine."""\n\n\ndef run():\n    return 1\n',
+            "widget/user.py": "from .core import run\n",
+        },
+    )
+
+    artifact = analyze_repository(repo)
+    module = next(node for node in artifact.nodes if node.kind.value == "module")
+
+    assert module.summary.startswith("3 files,")
+    assert "unimportant" not in module.summary
+    assert "engine" not in module.summary
+
+
+def test_module_id_is_stable_across_membership_change(tmp_path: Path) -> None:
+    # A module's id is keyed on its directory, so adding a file to the same
+    # package leaves the id unchanged (ids survive membership churn).
+    repo = _make_repo(
+        tmp_path / "repo",
+        {
+            "pkg/a.py": "from .b import B\n\n\nclass A:\n    pass\n",
+            "pkg/b.py": "class B:\n    pass\n",
+        },
+    )
+    before = analyze_repository(repo)
+    id_before = next(n.id for n in before.nodes if n.kind.value == "module")
+
+    (repo / "pkg" / "c.py").write_text("from .a import A\n\n\nclass C:\n    pass\n")
+    after = analyze_repository(repo)
+    modules_after = [n for n in after.nodes if n.kind.value == "module"]
+
+    assert len(modules_after) == 1
+    assert modules_after[0].id == id_before
+    assert len(modules_after[0].children) == 3
+
+
 def test_non_source_is_tagged_kept_and_excluded_from_layering(tmp_path: Path) -> None:
     repo = tmp_path / "repo"
     (repo / "pkg").mkdir(parents=True)
