@@ -141,7 +141,7 @@ def analyze_file_graph(
     root = root.resolve()
     files = source_files(root)
     tables = [parse_source_file(path) for path in files]
-    resolver = ImportResolver(root, files)
+    resolver = ImportResolver(root, files, tables=tables)
     classifier = build_role_classifier(config)
     relative = {path.resolve(): path.relative_to(root).as_posix() for path in files}
 
@@ -297,7 +297,7 @@ def _incremental_file_graph(
     classifier = build_role_classifier(config)
     changed_existing = [path for path in changed if path in relative]
     tables = [parse_source_file(relative[path]) for path in changed_existing]
-    resolver = ImportResolver(root, files)
+    resolver = ImportResolver(root, files, tables=tables)
     path_by_resolved = {
         path.resolve(): relative_path for relative_path, path in relative.items()
     }
