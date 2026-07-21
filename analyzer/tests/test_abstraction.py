@@ -135,6 +135,43 @@ def test_generic_common_directory_walks_up_to_meaningful_label(
     assert _module_labels(analyze_repository(repo)) == ["Viewer"]
 
 
+def test_dense_cross_directory_coupling_stays_an_edge_not_one_module(
+    tmp_path: Path,
+) -> None:
+    # Every service file imports every store file: dense cross-directory coupling
+    # that Louvain fuses into a single multi-anchor module. Phase C keeps a
+    # module within one top-level anchor, so the coupling survives as a module
+    # edge instead of hidden shared membership.
+    repo = _make_repo(
+        tmp_path / "repo",
+        {
+            "service/api.py": "from store.db import read, write\nfrom store.cache import get, put\n",
+            "service/web.py": "from store.db import read, write\nfrom store.cache import get, put\n",
+            "store/db.py": "def read():\n    return 1\n\n\ndef write():\n    return 2\n",
+            "store/cache.py": "def get():\n    return 3\n\n\ndef put():\n    return 4\n",
+        },
+    )
+
+    artifact = analyze_repository(repo)
+    nodes = {node.id: node for node in artifact.nodes}
+    modules = [node for node in artifact.nodes if node.kind.value == "module"]
+
+    for children in artifact.levels.module.values():
+        anchors = {
+            nodes[child.root].files[0].root.split("/", 1)[0] for child in children
+        }
+        assert len(anchors) == 1
+    assert len(modules) == 2
+
+    module_ids = {module.id for module in modules}
+    module_edges = [
+        edge
+        for edge in artifact.edges
+        if edge.source in module_ids and edge.target in module_ids
+    ]
+    assert module_edges
+
+
 def test_colliding_labels_disambiguated_by_path_segment_not_counter(
     tmp_path: Path,
 ) -> None:

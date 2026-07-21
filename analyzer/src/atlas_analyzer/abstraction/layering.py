@@ -12,7 +12,6 @@ import networkx as nx
 
 from atlas_analyzer.models import MapArtifact
 
-CROSS_DIRECTORY_DENSITY = 0.35
 GENERIC_DIRECTORIES = {
     ".",
     "app",
@@ -86,27 +85,12 @@ def _directory_constrained_communities(
         grouped: dict[str, list[str]] = defaultdict(list)
         for node in sorted(community):
             grouped[anchors[node]].append(node)
-        if len(grouped) == 1:
-            constrained.append(sorted(community))
-            continue
-
-        groups = list(sorted(grouped.items()))
-        possible = 0
-        crossing = 0
-        for index, (_, left) in enumerate(groups):
-            for _, right in groups[index + 1 :]:
-                possible += len(left) * len(right)
-                crossing += sum(
-                    1
-                    for source in left
-                    for target in right
-                    if graph.has_edge(source, target)
-                )
-        density = crossing / possible if possible else 0
-        if density >= CROSS_DIRECTORY_DENSITY:
-            constrained.append(sorted(community))
-        else:
-            constrained.extend(nodes for _, nodes in groups)
+        # A module or component never spans more than one anchor. Each anchor a
+        # Louvain community touches becomes its own group, so genuine
+        # cross-directory coupling survives as edges rather than shared
+        # membership (a single-anchor community is unchanged).
+        for _, nodes in sorted(grouped.items()):
+            constrained.append(sorted(nodes))
 
     orphans: dict[str, list[str]] = defaultdict(list)
     for node in sorted(isolated):
