@@ -30,6 +30,14 @@ def _path_for_file_node(node: dict[str, Any]) -> str:
     return node["files"][0]
 
 
+def _is_source(node: dict[str, Any]) -> bool:
+    """Only production source forms and names architecture. Non-source file
+    nodes (test, fixture, generated, vendored) are kept in the map but never
+    cluster into modules or components. The default preserves older maps that
+    predate the ``role`` field."""
+    return node.get("role", "source") == "source"
+
+
 def _module_anchor(path: str) -> str:
     parts = PurePosixPath(path).parts
     parents = parts[:-1]
@@ -314,21 +322,30 @@ def build_layered_map(file_map: MapArtifact, root: Path) -> MapArtifact:
         for edge in payload["edges"]
         if edge["source"] in file_nodes and edge["target"] in file_nodes
     ]
-    file_paths = {
-        node_id: _path_for_file_node(node) for node_id, node in file_nodes.items()
+    # Community detection, labels, and fan-in ranking run over source file
+    # nodes only. Non-source nodes stay in `file_nodes` (emitted below with
+    # their edges) but never join a module, so they can neither form nor name
+    # architecture. `_graph` drops the edges whose endpoints fall outside this
+    # set, keeping non-source coupling out of the clustering weights.
+    source_file_nodes = {
+        node_id: node for node_id, node in file_nodes.items() if _is_source(node)
+    }
+    source_paths = {
+        node_id: _path_for_file_node(node)
+        for node_id, node in source_file_nodes.items()
     }
 
-    file_graph = _graph(list(file_nodes), file_edges)
+    file_graph = _graph(list(source_file_nodes), file_edges)
     module_communities = _directory_constrained_communities(
         file_graph,
-        {node_id: _module_anchor(path) for node_id, path in file_paths.items()},
+        {node_id: _module_anchor(path) for node_id, path in source_paths.items()},
     )
     module_paths = [
-        sorted(file_paths[node_id] for node_id in community)
+        sorted(source_paths[node_id] for node_id in community)
         for community in module_communities
     ]
     module_labels = _deduplicate_labels(
-        [_base_label(paths, file_nodes) for paths in module_paths]
+        [_base_label(paths, source_file_nodes) for paths in module_paths]
     )
 
     modules: list[dict[str, Any]] = []
@@ -338,11 +355,12 @@ def build_layered_map(file_map: MapArtifact, root: Path) -> MapArtifact:
         module_communities, module_paths, module_labels, strict=True
     ):
         module_id = _node_id("mod", label, community)
-        loc = sum(file_nodes[node_id]["metrics"]["loc"] for node_id in community)
+        loc = sum(source_file_nodes[node_id]["metrics"]["loc"] for node_id in community)
         modules.append(
             {
                 "id": module_id,
                 "kind": "module",
+                "role": "source",
                 "label": label,
                 "summary": _summary(root, paths, loc),
                 "prose_source": "heuristic",
@@ -374,7 +392,7 @@ def build_layered_map(file_map: MapArtifact, root: Path) -> MapArtifact:
         if len(community) == 1:
             component_base_labels.append(module_nodes[community[0]]["label"])
         else:
-            component_base_labels.append(_base_label(paths, file_nodes))
+            component_base_labels.append(_base_label(paths, source_file_nodes))
     component_labels = _deduplicate_labels(component_base_labels)
 
     components: list[dict[str, Any]] = []
@@ -391,6 +409,7 @@ def build_layered_map(file_map: MapArtifact, root: Path) -> MapArtifact:
             {
                 "id": component_id,
                 "kind": "component",
+                "role": "source",
                 "label": label,
                 "summary": _summary(root, paths, loc),
                 "prose_source": "heuristic",
@@ -436,9 +455,9 @@ def refresh_layered_map(
 ) -> MapArtifact | None:
     """Refresh unchanged communities without running global Louvain again.
 
-    Community membership is reusable only when the weighted file graph is
-    unchanged. A topology or weight change returns ``None`` so the caller can
-    conservatively rebuild every layer.
+    Community membership is reusable only when the weighted file graph and the
+    per-file ``role`` are unchanged. A topology, weight, or role change returns
+    ``None`` so the caller can conservatively rebuild every layer.
     """
     payload = file_map.model_dump(mode="json", exclude_none=True)
     previous_payload = previous.model_dump(mode="json", exclude_none=True)
@@ -450,10 +469,20 @@ def refresh_layered_map(
         for edge in payload["edges"]
         if edge["source"] in file_nodes and edge["target"] in file_nodes
     ]
-    previous_file_ids = {
-        node["id"] for node in previous_payload["nodes"] if node["kind"] == "file"
+    previous_file_nodes = {
+        node["id"]: node for node in previous_payload["nodes"] if node["kind"] == "file"
     }
-    if set(file_nodes) != previous_file_ids:
+    if set(file_nodes) != set(previous_file_nodes):
+        return None
+    # A role reclassification (for example a changed [analysis] override) can
+    # move a file into or out of architecture, invalidating the reused
+    # community membership; rebuild fully so incremental output still matches a
+    # clean run.
+    if any(
+        file_nodes[node_id].get("role", "source")
+        != previous_file_nodes[node_id].get("role", "source")
+        for node_id in file_nodes
+    ):
         return None
 
     def weights(edges: list[dict[str, Any]]) -> dict[tuple[str, str], int]:

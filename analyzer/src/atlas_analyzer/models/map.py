@@ -41,6 +41,14 @@ class Kind(Enum):
     file = 'file'
 
 
+class Role(Enum):
+    source = 'source'
+    test = 'test'
+    fixture = 'fixture'
+    generated = 'generated'
+    vendored = 'vendored'
+
+
 class ProseSource(Enum):
     heuristic = 'heuristic'
     llm = 'llm'
@@ -60,6 +68,10 @@ class Node(BaseModel):
     )
     id: constr(min_length=1)
     kind: Kind
+    role: Role | None = Field(
+        'source',
+        description='Provenance class of the underlying file(s). Only role "source" files form and name modules/components; non-source nodes stay in the map but are excluded from architecture layering.',
+    )
     label: constr(min_length=1)
     summary: str
     prose_source: ProseSource

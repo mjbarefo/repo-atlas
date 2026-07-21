@@ -5,11 +5,15 @@ import {
   collectFiles,
   edgesForNodes,
   fitGraphTransform,
+  isNonSourceFile,
+  isNonSourceView,
+  NON_SOURCE_PREFIX,
   nodesById,
   sourceUrl,
   shouldUseCanvasEdges,
   toMermaid,
   viewNodeIds,
+  withNonSource,
 } from "./graph";
 
 const artifact = sample as unknown as MapArtifact;
@@ -70,6 +74,40 @@ describe("viewer graph model", () => {
       y: 36,
       scale: 0.18,
     });
+  });
+});
+
+describe("non-source files", () => {
+  it("keeps non-source files collapsed out of the default layered view", () => {
+    const generated = index.get("file:src/generated/api.ts")!;
+    expect(generated.role).toBe("generated");
+    expect(isNonSourceFile(generated)).toBe(true);
+    // Absent from every level, so it never appears when drilling source.
+    expect(viewNodeIds(artifact, [])).toEqual(["comp:auth"]);
+    const module = index.get("mod:auth.core")!;
+    expect(collectFiles(module, index)).not.toContain("src/generated/api.ts");
+  });
+
+  it("reveals non-source files as dimmed system buckets when toggled on", () => {
+    const revealed = withNonSource(artifact, true);
+    const revealedIndex = nodesById(revealed);
+    const bucketId = `${NON_SOURCE_PREFIX}src`;
+
+    const systemIds = viewNodeIds(revealed, []);
+    expect(systemIds).toContain("comp:auth");
+    expect(systemIds).toContain(bucketId);
+
+    const bucket = revealedIndex.get(bucketId)!;
+    expect(bucket.kind).toBe("component");
+    expect(isNonSourceView(bucket)).toBe(true);
+    // Drilling the bucket lists its non-source file nodes directly.
+    expect(viewNodeIds(revealed, [bucket])).toEqual([
+      "file:src/generated/api.ts",
+    ]);
+  });
+
+  it("returns the artifact unchanged when the toggle is off", () => {
+    expect(withNonSource(artifact, false)).toBe(artifact);
   });
 });
 

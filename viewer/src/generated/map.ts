@@ -23,6 +23,10 @@ export interface Repository {
 export interface Node {
   id: string;
   kind: "component" | "module" | "file";
+  /**
+   * Provenance class of the underlying file(s). Only role "source" files form and name modules/components; non-source nodes stay in the map but are excluded from architecture layering.
+   */
+  role?: "source" | "test" | "fixture" | "generated" | "vendored";
   label: string;
   summary: string;
   prose_source: "heuristic" | "llm";

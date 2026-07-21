@@ -229,6 +229,18 @@ input[type="file"] {
   color: #63e6be;
 }
 
+.secondary-button.toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  cursor: pointer;
+}
+
+.secondary-button.toggle input {
+  margin: 0;
+  accent-color: #63e6be;
+}
+
 .breadcrumbs {
   display: flex;
   min-width: 0;
@@ -367,6 +379,22 @@ input[type="file"] {
 .graph-node.change-type_changed rect {
   stroke: #ff965c;
   stroke-width: 3;
+}
+
+.graph-node.non-source {
+  opacity: 0.45;
+}
+
+.graph-node.non-source rect {
+  fill: #0e161b;
+  stroke: #3a4750;
+  stroke-dasharray: 4 3;
+}
+
+.graph-edge.non-source {
+  stroke: #3a4750;
+  stroke-dasharray: 4 4;
+  opacity: 0.55;
 }
 
 .change-badge {

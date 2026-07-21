@@ -56,6 +56,11 @@
       "properties": {
         "id": { "type": "string", "minLength": 1 },
         "kind": { "enum": ["component", "module", "file"] },
+        "role": {
+          "description": "Provenance class of the underlying file(s). Only role \"source\" files form and name modules/components; non-source nodes stay in the map but are excluded from architecture layering.",
+          "enum": ["source", "test", "fixture", "generated", "vendored"],
+          "default": "source"
+        },
         "label": { "type": "string", "minLength": 1 },
         "summary": { "type": "string" },
         "prose_source": { "enum": ["heuristic", "llm"] },

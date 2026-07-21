@@ -255,3 +255,46 @@ def test_analyze_cli_uses_the_documented_subcommand(tmp_path: Path) -> None:
     assert result.exit_code == 0
     assert "Analyzed 7 files and 5 imports; built" in result.stdout
     assert output.exists()
+
+
+def test_analyze_cli_role_override_tags_generated_paths(tmp_path: Path) -> None:
+    repo = tmp_path / "repo"
+    (repo / "pkg").mkdir(parents=True)
+    (repo / "pkg" / "core.py").write_text("VALUE = 1\n")
+    (repo / "pkg" / "bindings.py").write_text("VALUE = 2\n")
+    output = tmp_path / "map.json"
+
+    result = RUNNER.invoke(
+        app,
+        [
+            "analyze",
+            str(repo),
+            "--output",
+            str(output),
+            "--generated",
+            "pkg/bindings.py",
+        ],
+    )
+
+    assert result.exit_code == 0
+    payload = json.loads(output.read_text())
+    roles = {
+        node["id"]: node.get("role")
+        for node in payload["nodes"]
+        if node["kind"] == "file"
+    }
+    assert roles["file:pkg/bindings.py"] == "generated"
+    assert roles["file:pkg/core.py"] == "source"
+
+
+def test_analyze_cli_rejects_a_malformed_role_pattern(tmp_path: Path) -> None:
+    repo = tmp_path / "repo"
+    (repo / "pkg").mkdir(parents=True)
+    (repo / "pkg" / "core.py").write_text("VALUE = 1\n")
+
+    result = RUNNER.invoke(app, ["analyze", str(repo), "--generated", "!"])
+
+    # A clean usage error (BadParameter -> SystemExit), not an unhandled
+    # GitIgnorePatternError traceback leaking out of analysis.
+    assert result.exit_code != 0
+    assert not isinstance(result.exception, ValueError)

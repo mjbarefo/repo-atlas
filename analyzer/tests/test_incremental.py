@@ -15,7 +15,7 @@ from atlas_analyzer.analysis.analyzer import (
     write_map,
 )
 from atlas_analyzer.cli import app
-from atlas_analyzer.config import load_config, provider_environment
+from atlas_analyzer.config import AnalysisConfig, load_config, provider_environment
 from atlas_analyzer.enrichment import ProviderResult
 from atlas_analyzer.enrichment.contracts import (
     ClusterEnrichment,
@@ -128,6 +128,24 @@ def test_dependency_change_reparses_one_file_and_reclusters_safely(
 
     monkeypatch.setattr(analyzer, "parse_file", original)
     assert incremental == analyze_repository(repo)
+
+
+def test_role_reclassification_forces_full_rebuild(tmp_path: Path) -> None:
+    repo = _git_fixture(tmp_path)
+    baseline = analyze_repository(repo)
+    target = repo / "src" / "app.py"
+    target.write_text(target.read_text() + "\n# touched\n")
+
+    # Marking a previously-source file as generated cannot reuse the baseline
+    # community membership; the refresh must decline and the result must match a
+    # clean full run under the same configuration.
+    config = AnalysisConfig(generated=("src/app.py",))
+    incremental, report = analyze_repository_incremental(repo, baseline, config)
+
+    assert report.clustering.startswith("full")
+    app_node = next(node for node in incremental.nodes if node.id == "file:src/app.py")
+    assert app_node.role.value == "generated"
+    assert incremental == analyze_repository(repo, config)
 
 
 class ConfiguredProvider:

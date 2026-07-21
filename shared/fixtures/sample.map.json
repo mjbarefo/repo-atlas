@@ -9,6 +9,7 @@
     {
       "id": "comp:auth",
       "kind": "component",
+      "role": "source",
       "label": "Authentication",
       "summary": "Authentication and session persistence.",
       "prose_source": "heuristic",
@@ -19,6 +20,7 @@
     {
       "id": "mod:auth.core",
       "kind": "module",
+      "role": "source",
       "label": "Auth Core",
       "summary": "2 files; exports Session and SessionStore.",
       "prose_source": "heuristic",
@@ -29,6 +31,7 @@
     {
       "id": "file:src/auth/session.py",
       "kind": "file",
+      "role": "source",
       "label": "session.py",
       "summary": "Session lifecycle operations.",
       "prose_source": "heuristic",
@@ -39,12 +42,24 @@
     {
       "id": "file:src/auth/store.py",
       "kind": "file",
+      "role": "source",
       "label": "store.py",
       "summary": "Session storage operations.",
       "prose_source": "heuristic",
       "children": [],
       "files": ["src/auth/store.py"],
       "metrics": { "loc": 32, "fan_in": 1, "fan_out": 0 }
+    },
+    {
+      "id": "file:src/generated/api.ts",
+      "kind": "file",
+      "role": "generated",
+      "label": "api.ts",
+      "summary": "Generated API client bindings.",
+      "prose_source": "heuristic",
+      "children": [],
+      "files": ["src/generated/api.ts"],
+      "metrics": { "loc": 210, "fan_in": 0, "fan_out": 0 }
     }
   ],
   "edges": [
@@ -66,4 +81,3 @@
     }
   }
 }
-
