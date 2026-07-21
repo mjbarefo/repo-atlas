@@ -12,7 +12,13 @@ from .analysis.analyzer import (
     analyze_repository_incremental,
     write_map,
 )
-from .config import load_config, provider_environment
+from .analysis.roles import build_role_classifier
+from .config import (
+    AnalysisConfig,
+    load_analysis_config,
+    load_config,
+    provider_environment,
+)
 from .enrichment import (
     BudgetedEnrichmentClient,
     LiteLLMProvider,
@@ -62,22 +68,54 @@ def analyze(
         "--incremental",
         help="Update an existing map by parsing files changed from its source commit.",
     ),
+    generated: list[str] = typer.Option(
+        [],
+        "--generated",
+        help="Gitignore-style path pattern for generated files (repeatable); "
+        "these are tagged role=generated and excluded from module layering.",
+    ),
+    vendored: list[str] = typer.Option(
+        [],
+        "--vendored",
+        help="Gitignore-style path pattern for vendored files (repeatable); "
+        "these are tagged role=vendored and excluded from module layering.",
+    ),
+    config_path: Path | None = typer.Option(
+        None,
+        "--config",
+        dir_okay=False,
+        resolve_path=True,
+        help="Config path for the [analysis] table; defaults to ~/.atlas/config.toml.",
+    ),
 ) -> None:
     """Analyze REPO and emit an evidence-backed map artifact."""
+    try:
+        configured = load_analysis_config(config_path)
+        analysis_config = AnalysisConfig(
+            generated=(*configured.generated, *generated),
+            vendored=(*configured.vendored, *vendored),
+        )
+        # Compile the merged patterns now so a malformed --generated/--vendored
+        # flag or config entry is reported as a usage error, not a traceback.
+        build_role_classifier(analysis_config)
+    except ValueError as error:
+        raise typer.BadParameter(str(error)) from error
     destination = output or repo / ".atlas" / "map.json"
     if incremental:
         if not destination.is_file():
             raise typer.BadParameter(
                 f"incremental analysis requires an existing map: {destination}"
             )
-        artifact, report = analyze_repository_incremental(repo, _artifact(destination))
+        artifact, report = analyze_repository_incremental(
+            repo, _artifact(destination), analysis_config
+        )
         typer.echo(
             f"Incremental: {len(report.changed_files)} changed; "
             f"parsed {report.parsed_files}, reused {report.reused_files}; "
             f"clustering={report.clustering}"
         )
     else:
-        artifact = analyze_repository(repo)
+        artifact = analyze_repository(repo, analysis_config)
     write_map(artifact, destination)
     file_ids = {node.id for node in artifact.nodes if node.kind.value == "file"}
     file_edges = [

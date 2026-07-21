@@ -23,6 +23,19 @@ class EnrichmentConfig:
     provider_keys: dict[str, str] = field(default_factory=dict)
 
 
+@dataclass(frozen=True)
+class AnalysisConfig:
+    """Offline, credential-free overrides for the core analyzer.
+
+    ``generated`` and ``vendored`` are gitignore-style path patterns that mark
+    files whose provenance the path conventions cannot infer (for example a
+    generated package that does not live under a ``generated/`` directory).
+    """
+
+    generated: tuple[str, ...] = ()
+    vendored: tuple[str, ...] = ()
+
+
 def default_config_path() -> Path:
     return Path.home() / ".atlas" / "config.toml"
 
@@ -79,6 +92,40 @@ def load_config(path: Path | None = None) -> EnrichmentConfig:
         input_cost_per_million=optional_number("input_cost_per_million"),
         output_cost_per_million=optional_number("output_cost_per_million"),
         provider_keys=provider_keys,
+    )
+
+
+def load_analysis_config(path: Path | None = None) -> AnalysisConfig:
+    """Load the offline ``[analysis]`` table; empty when no config exists.
+
+    Mirrors :func:`load_config` (no network, no credentials). An explicit
+    ``path`` that does not exist is an error; the default path is optional.
+    """
+    source = path or default_config_path()
+    if not source.exists():
+        if path is not None:
+            raise ValueError(f"config does not exist: {source}")
+        return AnalysisConfig()
+    try:
+        payload = tomllib.loads(source.read_text())
+    except (OSError, tomllib.TOMLDecodeError) as error:
+        raise ValueError(f"could not read config {source}: {error}") from error
+
+    analysis = payload.get("analysis", {})
+    if not isinstance(analysis, dict):
+        raise ValueError("config section [analysis] must be a table")
+
+    def path_patterns(name: str) -> tuple[str, ...]:
+        value = analysis.get(name, [])
+        if not isinstance(value, list) or not all(
+            isinstance(item, str) for item in value
+        ):
+            raise ValueError(f"analysis.{name} must be a list of path patterns")
+        return tuple(value)
+
+    return AnalysisConfig(
+        generated=path_patterns("generated"),
+        vendored=path_patterns("vendored"),
     )
 
 

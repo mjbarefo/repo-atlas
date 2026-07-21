@@ -122,6 +122,84 @@ export function edgesForNodes(
   );
 }
 
+// Synthetic component buckets the viewer builds for revealed non-source files
+// carry this id prefix; the analyzer never emits it.
+export const NON_SOURCE_PREFIX = "nonsource:";
+
+export function isNonSourceFile(node: MapNode): boolean {
+  return node.kind === "file" && (node.role ?? "source") !== "source";
+}
+
+// A node that should be dimmed when revealed: either a non-source file emitted
+// by the analyzer, or one of the synthetic buckets that group them.
+export function isNonSourceView(node: MapNode): boolean {
+  return node.id.startsWith(NON_SOURCE_PREFIX) || isNonSourceFile(node);
+}
+
+// Non-source files (tests, fixtures, generated, vendored) are excluded from
+// module/component layering, so they have no parent in `levels`. When
+// `reveal` is on we surface them as synthetic, dimmed "non-source" component
+// buckets at the system level — one per top-level directory, deterministically
+// ordered — that drill straight to their file nodes. When off, the artifact is
+// returned unchanged and the non-source nodes stay collapsed (absent from every
+// level). This keeps every file reachable on demand without letting non-source
+// form or name real architecture.
+export function withNonSource(
+  artifact: MapArtifact,
+  reveal: boolean,
+): MapArtifact {
+  if (!reveal) {
+    return artifact;
+  }
+  const nonSource = artifact.nodes.filter(isNonSourceFile);
+  if (nonSource.length === 0) {
+    return artifact;
+  }
+  const byDirectory = new Map<string, MapNode[]>();
+  for (const node of nonSource) {
+    const directory = (node.files[0] ?? "").split("/")[0] || ".";
+    const bucket = byDirectory.get(directory) ?? [];
+    bucket.push(node);
+    byDirectory.set(directory, bucket);
+  }
+  const buckets: MapNode[] = [];
+  const componentLevel: Record<string, string[]> = {};
+  for (const directory of [...byDirectory.keys()].sort()) {
+    const members = byDirectory
+      .get(directory)!
+      .slice()
+      .sort((left, right) => left.id.localeCompare(right.id));
+    const childIds = members.map((member) => member.id);
+    const loc = members.reduce((sum, member) => sum + member.metrics.loc, 0);
+    const roles = [...new Set(members.map((member) => member.role ?? "source"))]
+      .sort()
+      .join(", ");
+    const id = `${NON_SOURCE_PREFIX}${directory}`;
+    buckets.push({
+      id,
+      kind: "component",
+      label: `${directory} · non-source`,
+      summary: `${members.length} non-source ${
+        members.length === 1 ? "file" : "files"
+      } (${roles}).`,
+      prose_source: "heuristic",
+      children: childIds,
+      files: [],
+      metrics: { loc, fan_in: 0, fan_out: 0 },
+    });
+    componentLevel[id] = childIds;
+  }
+  return {
+    ...artifact,
+    nodes: [...artifact.nodes, ...buckets],
+    levels: {
+      ...artifact.levels,
+      system: [...artifact.levels.system, ...buckets.map((bucket) => bucket.id)],
+      component: { ...artifact.levels.component, ...componentLevel },
+    },
+  };
+}
+
 export function shouldUseCanvasEdges(nodeCount: number): boolean {
   return nodeCount >= 400;
 }

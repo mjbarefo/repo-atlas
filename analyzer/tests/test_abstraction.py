@@ -70,6 +70,56 @@ def test_directory_constraint_and_heuristic_prose_are_sensible() -> None:
     )
 
 
+def test_non_source_is_tagged_kept_and_excluded_from_layering(tmp_path: Path) -> None:
+    repo = tmp_path / "repo"
+    (repo / "pkg").mkdir(parents=True)
+    (repo / "pkg" / "core.py").write_text("from pkg import util\n")
+    (repo / "pkg" / "util.py").write_text("VALUE = 1\n")
+    (repo / "tests").mkdir()
+    (repo / "tests" / "test_core.py").write_text("from pkg import core\n")
+    (repo / "pkg" / "generated").mkdir()
+    (repo / "pkg" / "generated" / "models.py").write_text("from pkg import util\n")
+    (repo / "pkg" / "fixtures").mkdir()
+    (repo / "pkg" / "fixtures" / "sample.py").write_text("from pkg import core\n")
+
+    artifact = analyze_repository(repo)
+
+    roles = {
+        node.id: node.role.value for node in artifact.nodes if node.kind.value == "file"
+    }
+    assert roles == {
+        "file:pkg/core.py": "source",
+        "file:pkg/util.py": "source",
+        "file:pkg/fixtures/sample.py": "fixture",
+        "file:pkg/generated/models.py": "generated",
+        "file:tests/test_core.py": "test",
+    }
+
+    # Only source files cluster into modules/components; non-source nodes are
+    # never a module child, so they cannot form or name architecture.
+    module_children = {
+        child.root for children in artifact.levels.module.values() for child in children
+    }
+    assert module_children == {"file:pkg/core.py", "file:pkg/util.py"}
+
+    # Non-source file nodes and their import edges still live in the artifact.
+    file_edges = {
+        (edge.source, edge.target)
+        for edge in artifact.edges
+        if edge.source.startswith("file:") and edge.target.startswith("file:")
+    }
+    assert ("file:tests/test_core.py", "file:pkg/core.py") in file_edges
+    assert ("file:pkg/generated/models.py", "file:pkg/util.py") in file_edges
+
+    # No module/component may be named after a non-source directory.
+    labels = {
+        node.label.lower() for node in artifact.nodes if node.kind.value != "file"
+    }
+    assert "generated" not in labels
+    assert "fixtures" not in labels
+    assert "tests" not in labels
+
+
 def test_rolled_edges_keep_file_evidence_and_real_symbols() -> None:
     artifact = analyze_repository(FIXTURE)
     higher_edges = [

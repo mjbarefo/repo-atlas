@@ -22,7 +22,9 @@ import {
   edgesForNodes,
   fitGraphTransform,
   type GraphLayout,
+  isNonSourceView,
   layoutGraph,
+  NON_SOURCE_PREFIX,
   nodesById,
   shouldUseCanvasEdges,
   sourceUrl,
@@ -30,6 +32,7 @@ import {
   type ViewPath,
   type ViewTransform,
   viewNodeIds,
+  withNonSource,
 } from "./graph";
 import { traceEnd, traceOverlay, visibleTraceEvents } from "./trace";
 import {
@@ -95,6 +98,7 @@ export function App() {
   const [loadError, setLoadError] = useState("");
   const [path, setPath] = useState<ViewPath>([]);
   const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [showNonSource, setShowNonSource] = useState(false);
   const [layout, setLayout] = useState<GraphLayout>(EMPTY_LAYOUT);
   const [layoutPending, setLayoutPending] = useState(false);
   const [transform, setTransform] = useState<ViewTransform>({
@@ -102,21 +106,35 @@ export function App() {
     y: 52,
     scale: 1,
   });
+  // The rendered view optionally augments the artifact with synthetic
+  // "non-source" buckets; the real artifact stays untouched for commit/trace
+  // matching. When the toggle is off, `view === artifact`.
+  const view = useMemo(
+    () => (artifact ? withNonSource(artifact, showNonSource) : null),
+    [artifact, showNonSource],
+  );
   const index = useMemo(
-    () => (artifact ? nodesById(artifact) : new Map<string, MapNode>()),
-    [artifact],
+    () => (view ? nodesById(view) : new Map<string, MapNode>()),
+    [view],
+  );
+  const nonSourceIds = useMemo(
+    () =>
+      view
+        ? new Set(view.nodes.filter(isNonSourceView).map((node) => node.id))
+        : new Set<string>(),
+    [view],
   );
   const visibleIds = useMemo(
-    () => (artifact ? viewNodeIds(artifact, path) : []),
-    [artifact, path],
+    () => (view ? viewNodeIds(view, path) : []),
+    [view, path],
   );
   const visibleNodes = useMemo(
     () => visibleIds.flatMap((id) => (index.get(id) ? [index.get(id)!] : [])),
     [index, visibleIds],
   );
   const visibleEdges = useMemo(
-    () => (artifact ? edgesForNodes(artifact, visibleIds) : []),
-    [artifact, visibleIds],
+    () => (view ? edgesForNodes(view, visibleIds) : []),
+    [view, visibleIds],
   );
   const selected = selectedId ? (index.get(selectedId) ?? null) : null;
   const replayEvents = useMemo(
@@ -131,24 +149,24 @@ export function App() {
   );
   const overlay = useMemo(
     () =>
-      artifact
-        ? traceOverlay(artifact, replayEvents, visibleIds)
+      view
+        ? traceOverlay(view, replayEvents, visibleIds)
         : {
             activity: new Map(),
             provisionalNodeIds: [],
             riskNodeIds: new Set<string>(),
           },
-    [artifact, replayEvents, visibleIds],
+    [view, replayEvents, visibleIds],
   );
   const changeImpact = useMemo(
     () =>
-      artifact && impact
-        ? impactOverlay(artifact, impact, visibleIds)
+      view && impact
+        ? impactOverlay(view, impact, visibleIds)
         : {
             changeStatuses: new Map<string, ChangeDisplayStatus>(),
             riskNodeIds: new Set<string>(),
           },
-    [artifact, impact, visibleIds],
+    [view, impact, visibleIds],
   );
   const coverage = useMemo(
     () =>
@@ -449,6 +467,27 @@ export function App() {
         </div>
         <div className="topbar-actions">
           <span className="node-count">{visibleNodes.length} nodes</span>
+          <label className="secondary-button toggle" title="Reveal tests, fixtures, generated, and vendored files as dimmed non-source buckets">
+            <input
+              type="checkbox"
+              checked={showNonSource}
+              onChange={(event) => {
+                const next = event.target.checked;
+                setShowNonSource(next);
+                // Turning the toggle off removes the synthetic buckets; if the
+                // user was drilled inside one, that path node no longer exists,
+                // so return to the system view instead of a stale orphan view.
+                if (
+                  !next &&
+                  path.some((node) => node.id.startsWith(NON_SOURCE_PREFIX))
+                ) {
+                  setPath([]);
+                  setSelectedId(null);
+                }
+              }}
+            />
+            Non-source
+          </label>
           <a
             className="secondary-button"
             download={`${path.at(-1)?.label ?? "atlas-system"}.mmd`}
@@ -485,7 +524,8 @@ export function App() {
           </span>
         ))}
         <span className="level-label">
-          {path.at(-1)?.kind === "module"
+          {path.at(-1)?.id.startsWith(NON_SOURCE_PREFIX) ||
+          path.at(-1)?.kind === "module"
             ? "Files"
             : path.at(-1)?.kind === "component"
               ? "Modules"
@@ -498,6 +538,7 @@ export function App() {
           changeStatuses={changeImpact.changeStatuses}
           impactRiskNodeIds={changeImpact.riskNodeIds}
           layout={layout}
+          nonSourceIds={nonSourceIds}
           pending={layoutPending}
           selectedId={selectedId}
           transform={transform}
@@ -544,6 +585,7 @@ interface MapCanvasProps {
   changeStatuses: Map<string, ChangeDisplayStatus>;
   impactRiskNodeIds: Set<string>;
   layout: GraphLayout;
+  nonSourceIds: Set<string>;
   pending: boolean;
   selectedId: string | null;
   transform: ViewTransform;
@@ -559,6 +601,7 @@ function MapCanvas({
   changeStatuses,
   impactRiskNodeIds,
   layout,
+  nonSourceIds,
   pending,
   selectedId,
   transform,
@@ -834,7 +877,12 @@ function MapCanvas({
           {!useCanvasEdges &&
             layout.edges.map((positioned, index) => (
               <polyline
-                className="graph-edge"
+                className={`graph-edge ${
+                  nonSourceIds.has(positioned.edge.source) ||
+                  nonSourceIds.has(positioned.edge.target)
+                    ? "non-source"
+                    : ""
+                }`}
                 key={`${positioned.edge.source}-${positioned.edge.target}-${index}`}
                 points={positioned.points
                   .map((point) => `${point.x},${point.y}`)
@@ -845,7 +893,7 @@ function MapCanvas({
             <g
               className={`graph-node ${node.kind} ${
                 selectedId === node.id ? "selected" : ""
-              } ${
+              } ${nonSourceIds.has(node.id) ? "non-source" : ""} ${
                 changeStatuses.has(node.id)
                   ? `change-${changeStatuses.get(node.id)}`
                   : ""

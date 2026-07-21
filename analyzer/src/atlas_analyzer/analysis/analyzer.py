@@ -10,11 +10,13 @@ import subprocess
 import sys
 
 from atlas_analyzer.artifact_io import atomic_write_text
+from atlas_analyzer.config import AnalysisConfig
 from atlas_analyzer.models import MapArtifact
 
 from .facts import SymbolTable
 from .languages import classify, parse_file, unparsable_table
 from .repository import ImportResolver, source_files
+from .roles import build_role_classifier
 
 
 def parse_source_file(path: Path) -> SymbolTable:
@@ -133,11 +135,14 @@ def _repository_identity(root: Path, files: list[Path]) -> tuple[str, str]:
         return f"worktree:{_worktree_digest(root, files)}", "1970-01-01T00:00:00Z"
 
 
-def analyze_file_graph(root: Path) -> MapArtifact:
+def analyze_file_graph(
+    root: Path, config: AnalysisConfig = AnalysisConfig()
+) -> MapArtifact:
     root = root.resolve()
     files = source_files(root)
     tables = [parse_source_file(path) for path in files]
     resolver = ImportResolver(root, files)
+    classifier = build_role_classifier(config)
     relative = {path.resolve(): path.relative_to(root).as_posix() for path in files}
 
     edge_evidence: dict[tuple[str, str], set[tuple[str, int]]] = defaultdict(set)
@@ -164,6 +169,7 @@ def analyze_file_graph(root: Path) -> MapArtifact:
             {
                 "id": f"file:{path}",
                 "kind": "file",
+                "role": classifier.role_for(path),
                 "label": table.path.name,
                 "summary": "",
                 "prose_source": "heuristic",
@@ -202,10 +208,12 @@ def analyze_file_graph(root: Path) -> MapArtifact:
     )
 
 
-def analyze_repository(root: Path) -> MapArtifact:
+def analyze_repository(
+    root: Path, config: AnalysisConfig = AnalysisConfig()
+) -> MapArtifact:
     from atlas_analyzer.abstraction import build_layered_map
 
-    return build_layered_map(analyze_file_graph(root), root.resolve())
+    return build_layered_map(analyze_file_graph(root, config), root.resolve())
 
 
 def _base_commit(version: str) -> str:
@@ -271,6 +279,7 @@ def _incremental_file_graph(
     root: Path,
     previous: MapArtifact,
     changed: tuple[str, ...],
+    config: AnalysisConfig,
 ) -> MapArtifact | None:
     previous_nodes = {
         node.id: node.model_dump(mode="json", exclude_none=True)
@@ -285,6 +294,7 @@ def _incremental_file_graph(
     relative = {path: root / path for path in sorted(previous_paths)}
     files = list(relative.values())
 
+    classifier = build_role_classifier(config)
     changed_existing = [path for path in changed if path in relative]
     tables = [parse_source_file(relative[path]) for path in changed_existing]
     resolver = ImportResolver(root, files)
@@ -336,6 +346,10 @@ def _incremental_file_graph(
     for node_id in sorted(previous_nodes):
         node = previous_nodes[node_id]
         node["metrics"] = dict(node["metrics"])
+        # Recompute role from the path with the same classifier the full run
+        # uses, so incremental output stays byte-identical and never inherits a
+        # stale role from a map produced before this field existed.
+        node["role"] = classifier.role_for(node_id.removeprefix("file:"))
         if node_id in table_by_id:
             node["metrics"]["loc"] = table_by_id[node_id].loc
             node["summary"] = ""
@@ -359,7 +373,9 @@ def _incremental_file_graph(
 
 
 def analyze_repository_incremental(
-    root: Path, previous: MapArtifact
+    root: Path,
+    previous: MapArtifact,
+    config: AnalysisConfig = AnalysisConfig(),
 ) -> tuple[MapArtifact, IncrementalReport]:
     """Update a map by parsing only source files changed from its source commit."""
     from atlas_analyzer.abstraction import build_layered_map
@@ -371,9 +387,9 @@ def analyze_repository_incremental(
     if not changed:
         return previous, IncrementalReport((), 0, previous_file_count, "reused")
 
-    file_map = _incremental_file_graph(root, previous, changed)
+    file_map = _incremental_file_graph(root, previous, changed, config)
     if file_map is None:
-        artifact = analyze_repository(root)
+        artifact = analyze_repository(root, config)
         file_count = sum(node.kind.value == "file" for node in artifact.nodes)
         return artifact, IncrementalReport(
             changed,
