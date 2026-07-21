@@ -1,4 +1,5 @@
 from pathlib import Path
+import re
 import shutil
 import subprocess
 
@@ -10,6 +11,22 @@ from atlas_analyzer.query import cycles, dependencies, hotspots
 
 FIXTURE = Path(__file__).parent / "fixtures" / "golden_repo"
 RUNNER = CliRunner()
+
+# A bare disambiguation counter such as "Widgets 2": a base label followed by a
+# space and a run of digits at the end.
+COUNTER_LABEL = re.compile(r".*\s\d+$")
+
+
+def _make_repo(base: Path, files: dict[str, str]) -> Path:
+    for relative, body in files.items():
+        path = base / relative
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(body)
+    return base
+
+
+def _module_labels(artifact) -> list[str]:
+    return [node.label for node in artifact.nodes if node.kind.value == "module"]
 
 
 def test_layered_map_is_deterministic_and_complete(tmp_path: Path) -> None:
@@ -63,11 +80,85 @@ def test_directory_constraint_and_heuristic_prose_are_sensible() -> None:
         labels = [node.label for node in artifact.nodes if node.kind.value == kind]
         assert len(labels) == len(set(labels))
         assert all(label and label.lower() != "src" for label in labels)
+        assert not any(COUNTER_LABEL.match(label) for label in labels)
     assert all(
         node.summary
         for node in artifact.nodes
         if node.kind.value in {"module", "component"}
     )
+
+
+def test_single_leaf_package_is_not_split_into_counter_modules(tmp_path: Path) -> None:
+    # Two internally dense clusters in one leaf directory (two triangles joined
+    # by a single bridge) make Louvain split the package. Phase C re-merges
+    # communities that share a common leaf directory, so the package is a single
+    # module instead of "Widgets" / "Widgets 2".
+    repo = _make_repo(
+        tmp_path / "repo",
+        {
+            "widgets/a1.py": (
+                "from .a2 import A2\nfrom .a3 import A3\nfrom .b1 import B1\n\n\n"
+                "class A1:\n    pass\n"
+            ),
+            "widgets/a2.py": "from .a1 import A1\nfrom .a3 import A3\n\n\nclass A2:\n    pass\n",
+            "widgets/a3.py": "from .a1 import A1\nfrom .a2 import A2\n\n\nclass A3:\n    pass\n",
+            "widgets/b1.py": "from .b2 import B2\nfrom .b3 import B3\n\n\nclass B1:\n    pass\n",
+            "widgets/b2.py": "from .b1 import B1\nfrom .b3 import B3\n\n\nclass B2:\n    pass\n",
+            "widgets/b3.py": "from .b1 import B1\nfrom .b2 import B2\n\n\nclass B3:\n    pass\n",
+        },
+    )
+
+    artifact = analyze_repository(repo)
+    labels = _module_labels(artifact)
+    modules = [node for node in artifact.nodes if node.kind.value == "module"]
+
+    assert labels == ["Widgets"]
+    assert not any(COUNTER_LABEL.match(label) for label in labels)
+    assert len(modules[0].children) == 6
+
+
+def test_generic_common_directory_walks_up_to_meaningful_label(
+    tmp_path: Path,
+) -> None:
+    # A group whose common directory ends in a generic segment ("viewer/src")
+    # must be named after the nearest meaningful ancestor ("Viewer"), not a file
+    # stem.
+    repo = _make_repo(
+        tmp_path / "repo",
+        {
+            "viewer/src/alpha.py": "from .beta import Beta\n\n\nclass Alpha:\n    pass\n",
+            "viewer/src/beta.py": "from .gamma import Gamma\n\n\nclass Beta:\n    pass\n",
+            "viewer/src/gamma.py": "class Gamma:\n    pass\n",
+        },
+    )
+
+    assert _module_labels(analyze_repository(repo)) == ["Viewer"]
+
+
+def test_colliding_labels_disambiguated_by_path_segment_not_counter(
+    tmp_path: Path,
+) -> None:
+    # Two distinct directories share the leaf name "api". They must not re-merge
+    # (different common directories) and must be disambiguated by the
+    # distinguishing path segment rather than a bare "Api 2" counter.
+    repo = _make_repo(
+        tmp_path / "repo",
+        {
+            "alpha/api/one.py": "from .two import Two\n\n\nclass One:\n    pass\n",
+            "alpha/api/two.py": "class Two:\n    pass\n",
+            "beta/api/one.py": "from .two import Two\n\n\nclass One:\n    pass\n",
+            "beta/api/two.py": "class Two:\n    pass\n",
+        },
+    )
+
+    labels = sorted(_module_labels(analyze_repository(repo)))
+
+    assert len(labels) == 2
+    assert len(set(labels)) == 2
+    assert not any(COUNTER_LABEL.match(label) for label in labels)
+    lowered = " ".join(labels).lower()
+    assert "alpha" in lowered
+    assert "beta" in lowered
 
 
 def test_non_source_is_tagged_kept_and_excluded_from_layering(tmp_path: Path) -> None:
