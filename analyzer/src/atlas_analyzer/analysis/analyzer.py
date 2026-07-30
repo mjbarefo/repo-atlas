@@ -214,8 +214,11 @@ def analyze_repository(
     root: Path, config: AnalysisConfig = AnalysisConfig()
 ) -> MapArtifact:
     from atlas_analyzer.abstraction import build_layered_map
+    from atlas_analyzer.audit import attach_audit
 
-    return build_layered_map(analyze_file_graph(root, config), root.resolve())
+    return attach_audit(
+        build_layered_map(analyze_file_graph(root, config), root.resolve())
+    )
 
 
 def _base_commit(version: str) -> str:
@@ -388,12 +391,15 @@ def analyze_repository_incremental(
     """Update a map by parsing only source files changed from its source commit."""
     from atlas_analyzer.abstraction import build_layered_map
     from atlas_analyzer.abstraction.layering import refresh_layered_map
+    from atlas_analyzer.audit import attach_audit
 
     root = root.resolve()
     changed = changed_source_paths(root, previous.repo.commit)
     previous_file_count = sum(node.kind.value == "file" for node in previous.nodes)
     if not changed:
-        return previous, IncrementalReport((), 0, previous_file_count, "reused")
+        return attach_audit(previous), IncrementalReport(
+            (), 0, previous_file_count, "reused"
+        )
 
     file_map = _incremental_file_graph(root, previous, changed, config)
     if file_map is None:
@@ -413,6 +419,7 @@ def analyze_repository_incremental(
         clustering = "full (dependency weights changed)"
     else:
         clustering = "affected communities"
+    artifact = attach_audit(artifact)
     return artifact, IncrementalReport(
         changed,
         len(changed),

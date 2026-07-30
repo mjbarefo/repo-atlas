@@ -214,6 +214,23 @@ input[type="file"] {
   font-size: 0.7rem;
 }
 
+.audit-badge {
+  border: 1px solid #365347;
+  border-radius: 999px;
+  padding: 0.3rem 0.55rem;
+  background: #10221c;
+  color: #7ad8bb;
+  font-family: "DM Mono", monospace;
+  font-size: 0.62rem;
+  white-space: nowrap;
+}
+
+.audit-badge.has-warnings {
+  border-color: #765149;
+  background: #281917;
+  color: #ff9b82;
+}
+
 .secondary-button {
   min-height: 2rem;
   border-color: #35434b;
@@ -825,6 +842,14 @@ input[type="file"] {
   line-height: 1.6;
 }
 
+.node-provenance {
+  margin: 0.4rem 0 0;
+  color: #687780;
+  font-family: "DM Mono", monospace;
+  font-size: 0.62rem;
+  text-transform: uppercase;
+}
+
 .close-detail {
   position: absolute;
   top: 1rem;
@@ -878,10 +903,61 @@ input[type="file"] {
 }
 
 .source-list,
-.edge-list {
+.edge-list,
+.audit-list,
+.audit-list ul {
   padding: 0;
   margin: 0;
   list-style: none;
+}
+
+.audit-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.65rem;
+}
+
+.audit-list > li {
+  border-left: 2px solid #687780;
+  padding-left: 0.7rem;
+}
+
+.audit-list > li.warning {
+  border-color: #ff765f;
+}
+
+.audit-list > li.notice {
+  border-color: #c89b50;
+}
+
+.audit-list strong,
+.audit-list span {
+  display: block;
+}
+
+.audit-list strong {
+  color: #d8e0e4;
+  font-family: "DM Mono", monospace;
+  font-size: 0.66rem;
+  text-transform: uppercase;
+}
+
+.audit-list span {
+  margin-top: 0.25rem;
+  color: #9daab1;
+  font-size: 0.72rem;
+  line-height: 1.45;
+}
+
+.audit-list ul {
+  margin-top: 0.4rem;
+  color: #687780;
+  font-family: "DM Mono", monospace;
+  font-size: 0.6rem;
+}
+
+.audit-list ul li + li {
+  margin-top: 0.2rem;
 }
 
 .source-list {

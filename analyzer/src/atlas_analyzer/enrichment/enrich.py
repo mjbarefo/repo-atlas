@@ -96,6 +96,10 @@ def _validated_edge_labels(
 
 def _structural_projection(artifact: MapArtifact) -> dict[str, Any]:
     payload = artifact.model_dump(mode="json", exclude_none=True)
+    # Audit findings are a deterministic projection of the completed map, not
+    # analyzer topology. Recalculate them after prose changes so messages use
+    # the current labels without treating that refresh as structural mutation.
+    payload.pop("audit", None)
     for node in payload["nodes"]:
         node.pop("label", None)
         node.pop("summary", None)
@@ -273,7 +277,9 @@ def enrich_map(
         if pair in edge_updates:
             edge["label"] = edge_updates[pair]
 
-    enriched = MapArtifact.model_validate(enriched_payload)
+    from atlas_analyzer.audit import attach_audit
+
+    enriched = attach_audit(MapArtifact.model_validate(enriched_payload))
     validate_structural_identity(artifact, enriched)
     return enriched, EnrichmentReport(
         modules_enriched=len(module_updates),

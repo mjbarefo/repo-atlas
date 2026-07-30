@@ -18,9 +18,75 @@
       "items": { "$ref": "#/$defs/edge" }
     },
     "levels": { "$ref": "#/$defs/levels" },
-    "capabilities": { "$ref": "#/$defs/capabilities" }
+    "capabilities": { "$ref": "#/$defs/capabilities" },
+    "audit": { "$ref": "#/$defs/audit" }
   },
   "$defs": {
+    "audit": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["ruleset", "summary", "findings"],
+      "properties": {
+        "ruleset": {
+          "const": "1",
+          "description": "Version of the deterministic map-health rules used to produce these findings."
+        },
+        "summary": { "$ref": "#/$defs/audit_summary" },
+        "findings": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/audit_finding" }
+        }
+      }
+    },
+    "audit_summary": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "files",
+        "modules",
+        "components",
+        "edges",
+        "warnings",
+        "notices"
+      ],
+      "properties": {
+        "files": { "type": "integer", "minimum": 0 },
+        "modules": { "type": "integer", "minimum": 0 },
+        "components": { "type": "integer", "minimum": 0 },
+        "edges": { "type": "integer", "minimum": 0 },
+        "warnings": { "type": "integer", "minimum": 0 },
+        "notices": { "type": "integer", "minimum": 0 }
+      }
+    },
+    "audit_finding": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "code",
+        "severity",
+        "message",
+        "node_ids",
+        "evidence"
+      ],
+      "properties": {
+        "id": { "type": "string", "minLength": 1 },
+        "code": { "type": "string", "minLength": 1 },
+        "severity": { "enum": ["warning", "notice"] },
+        "message": { "type": "string", "minLength": 1 },
+        "node_ids": {
+          "type": "array",
+          "minItems": 1,
+          "items": { "type": "string", "minLength": 1 },
+          "uniqueItems": true
+        },
+        "evidence": {
+          "type": "array",
+          "minItems": 1,
+          "items": { "type": "string", "minLength": 1 }
+        }
+      }
+    },
     "capabilities": {
       "type": "object",
       "additionalProperties": false,
@@ -159,4 +225,3 @@
     }
   }
 }
-

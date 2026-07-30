@@ -83,5 +83,17 @@
   },
   "capabilities": {
     "supported_edge_kinds": ["imports"]
+  },
+  "audit": {
+    "ruleset": "1",
+    "summary": {
+      "files": 3,
+      "modules": 1,
+      "components": 1,
+      "edges": 1,
+      "warnings": 0,
+      "notices": 0
+    },
+    "findings": []
   }
 }

@@ -17,6 +17,43 @@ from pydantic import (
 )
 
 
+class AuditSummary(BaseModel):
+    model_config = ConfigDict(
+        extra='forbid',
+    )
+    files: conint(ge=0)
+    modules: conint(ge=0)
+    components: conint(ge=0)
+    edges: conint(ge=0)
+    warnings: conint(ge=0)
+    notices: conint(ge=0)
+
+
+class Severity(Enum):
+    warning = 'warning'
+    notice = 'notice'
+
+
+class NodeId(RootModel[constr(min_length=1)]):
+    root: constr(min_length=1)
+
+
+class EvidenceItem(RootModel[constr(min_length=1)]):
+    root: constr(min_length=1)
+
+
+class AuditFinding(BaseModel):
+    model_config = ConfigDict(
+        extra='forbid',
+    )
+    id: constr(min_length=1)
+    code: constr(min_length=1)
+    severity: Severity
+    message: constr(min_length=1)
+    node_ids: list[NodeId] = Field(..., min_length=1)
+    evidence: list[EvidenceItem] = Field(..., min_length=1)
+
+
 class SupportedEdgeKind(Enum):
     imports = 'imports'
     calls = 'calls'
@@ -152,6 +189,18 @@ class Levels(BaseModel):
     module: dict[str, list[ModuleItem]]
 
 
+class Audit(BaseModel):
+    model_config = ConfigDict(
+        extra='forbid',
+    )
+    ruleset: Literal['1'] = Field(
+        ...,
+        description='Version of the deterministic map-health rules used to produce these findings.',
+    )
+    summary: AuditSummary
+    findings: list[AuditFinding]
+
+
 class MapArtifact(BaseModel):
     model_config = ConfigDict(
         extra='forbid',
@@ -162,3 +211,4 @@ class MapArtifact(BaseModel):
     edges: list[Edge]
     levels: Levels
     capabilities: Capabilities | None = None
+    audit: Audit | None = None
