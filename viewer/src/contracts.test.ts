@@ -102,6 +102,22 @@ describe("artifact contracts", () => {
     expect(validateMap(invalid)).toBe(false);
   });
 
+  it("rejects invalid audit severity", () => {
+    const invalid = structuredClone(sampleMap) as MapArtifact;
+    invalid.audit!.findings = [
+      {
+        id: "opaque-score:file:src/auth/session.py",
+        code: "opaque-score",
+        severity: "critical" as "warning",
+        message: "An invalid finding.",
+        node_ids: ["file:src/auth/session.py"],
+        evidence: ["score=99"],
+      },
+    ];
+
+    expect(validateMap(invalid)).toBe(false);
+  });
+
   it("rejects malformed timestamps", () => {
     const invalid = structuredClone(sampleMap) as MapArtifact;
     invalid.repo.generated_at = "not-a-timestamp";

@@ -1,0 +1,24 @@
+{
+  "ruleset": "1",
+  "expected_findings": [
+    {
+      "code": "large-file",
+      "node_ids": ["file:viewer/src/App.tsx"]
+    },
+    {
+      "code": "large-module",
+      "node_ids": ["mod:analyzer-src-atlas-analyzer-fe1fc80965"]
+    },
+    {
+      "code": "module-cycle",
+      "node_ids": [
+        "mod:analyzer-src-atlas-analyzer-enrichment-70ba3f636d",
+        "mod:analyzer-src-atlas-analyzer-fe1fc80965"
+      ]
+    },
+    {
+      "code": "thin-module",
+      "node_ids": ["mod:viewer-d35ca5051b"]
+    }
+  ]
+}

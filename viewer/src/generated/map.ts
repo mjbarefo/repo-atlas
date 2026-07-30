@@ -15,6 +15,7 @@ export interface MapArtifact {
   edges: Edge[];
   levels: Levels;
   capabilities?: Capabilities;
+  audit?: Audit;
 }
 export interface Repository {
   root: string;
@@ -78,4 +79,34 @@ export interface Capabilities {
    * Edge kinds the analyzer actually emits. A kind present in an edge's `kind` enum but absent here is declared in the contract but not yet produced.
    */
   supported_edge_kinds: ("imports" | "calls" | "inherits")[];
+}
+export interface Audit {
+  /**
+   * Version of the deterministic map-health rules used to produce these findings.
+   */
+  ruleset: "1";
+  summary: AuditSummary;
+  findings: AuditFinding[];
+}
+export interface AuditSummary {
+  files: number;
+  modules: number;
+  components: number;
+  edges: number;
+  warnings: number;
+  notices: number;
+}
+export interface AuditFinding {
+  id: string;
+  code: string;
+  severity: "warning" | "notice";
+  message: string;
+  /**
+   * @minItems 1
+   */
+  node_ids: [string, ...string[]];
+  /**
+   * @minItems 1
+   */
+  evidence: [string, ...string[]];
 }

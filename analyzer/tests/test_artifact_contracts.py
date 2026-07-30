@@ -84,6 +84,25 @@ def test_map_rejects_invalid_prose_source() -> None:
         MapArtifact.model_validate(artifact)
 
 
+def test_map_rejects_invalid_audit_severity() -> None:
+    artifact = load_json(FIXTURES / "sample.map.json")
+    artifact["audit"]["findings"] = [
+        {
+            "id": "opaque-score:file:src/auth/session.py",
+            "code": "opaque-score",
+            "severity": "critical",
+            "message": "An invalid finding.",
+            "node_ids": ["file:src/auth/session.py"],
+            "evidence": ["score=99"],
+        }
+    ]
+
+    with pytest.raises(ValidationError):
+        Draft202012Validator(load_json(SCHEMAS / "map.schema.json")).validate(artifact)
+    with pytest.raises(ValueError):
+        MapArtifact.model_validate(artifact)
+
+
 def test_map_rejects_malformed_timestamp() -> None:
     artifact = load_json(FIXTURES / "sample.map.json")
     artifact["repo"]["generated_at"] = "not-a-timestamp"

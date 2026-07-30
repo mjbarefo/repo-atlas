@@ -2,6 +2,7 @@
 
 import asyncio
 from enum import Enum
+import json
 from pathlib import Path
 import tempfile
 
@@ -13,6 +14,7 @@ from .analysis.analyzer import (
     write_map,
 )
 from .analysis.roles import build_role_classifier
+from .audit import audit_map, explain_node
 from .config import (
     AnalysisConfig,
     load_analysis_config,
@@ -40,6 +42,11 @@ app.add_typer(query_app, name="query", help="Query a completed map artifact.")
 
 class ProviderChoice(str, Enum):
     litellm = "litellm"
+
+
+class OutputFormat(str, Enum):
+    text = "text"
+    json = "json"
 
 
 _LOOPBACK_HOSTS = {"127.0.0.1", "localhost", "::1"}
@@ -540,6 +547,110 @@ def hotspots_command(
         _artifact(map_path), repo, limit=limit
     ):
         typer.echo(f"{score}\t{fan_in}\t{churn}\t{node_id}")
+
+
+@app.command("audit")
+def audit_command(
+    map_path: Path = typer.Option(
+        Path(".atlas/map.json"),
+        "--map",
+        exists=True,
+        dir_okay=False,
+        resolve_path=True,
+    ),
+    output_format: OutputFormat = typer.Option(
+        OutputFormat.text,
+        "--format",
+        help="Render a human-readable report or stable JSON.",
+    ),
+) -> None:
+    """Report deterministic map-health findings."""
+    report = audit_map(_artifact(map_path))
+    if output_format is OutputFormat.json:
+        typer.echo(report.model_dump_json(indent=2))
+        return
+
+    summary = report.summary
+    typer.echo(
+        f"Map audit (ruleset {report.ruleset}): "
+        f"{summary.warnings} warning(s), {summary.notices} notice(s)"
+    )
+    typer.echo(
+        f"{summary.components} components, {summary.modules} modules, "
+        f"{summary.files} files, {summary.edges} edges"
+    )
+    for finding in report.findings:
+        node_ids = ", ".join(item.root for item in finding.node_ids)
+        typer.echo(f"\n{finding.severity.value.upper()} {finding.code} [{node_ids}]")
+        typer.echo(f"  {finding.message}")
+        for evidence in finding.evidence:
+            typer.echo(f"  - {evidence.root}")
+
+
+@app.command("explain")
+def explain_command(
+    node: str = typer.Argument(..., help="Node ID to explain."),
+    map_path: Path = typer.Option(
+        Path(".atlas/map.json"),
+        "--map",
+        exists=True,
+        dir_okay=False,
+        resolve_path=True,
+    ),
+    output_format: OutputFormat = typer.Option(
+        OutputFormat.text,
+        "--format",
+        help="Render a human-readable explanation or stable JSON.",
+    ),
+) -> None:
+    """Explain one node, its hierarchy, findings, and dependency evidence."""
+    try:
+        explanation = explain_node(_artifact(map_path), node)
+    except KeyError as error:
+        raise typer.BadParameter(f"unknown node: {node}") from error
+    if output_format is OutputFormat.json:
+        typer.echo(json.dumps(explanation, indent=2, sort_keys=True))
+        return
+
+    explained = explanation["node"]
+    metrics = explained["metrics"]
+    typer.echo(f"{explained['label']} [{explained['kind']}]")
+    typer.echo(f"ID: {explained['id']}")
+    if role := explained.get("role"):
+        typer.echo(f"Role: {role}")
+    hierarchy = [
+        *(item["label"] for item in explanation["hierarchy"]),
+        explained["label"],
+    ]
+    typer.echo(f"Hierarchy: {' > '.join(hierarchy)}")
+    typer.echo(
+        f"Metrics: {metrics['loc']} LOC, {metrics['fan_in']} fan-in, "
+        f"{metrics['fan_out']} fan-out"
+    )
+    if explained.get("summary"):
+        typer.echo(f"Summary: {explained['summary']}")
+
+    findings = explanation["audit_findings"]
+    typer.echo(f"Audit findings: {len(findings)}")
+    for finding in findings:
+        typer.echo(
+            f"  {finding['severity'].upper()} {finding['code']}: "
+            f"{finding['message']}"
+        )
+
+    relationships = explanation["relationships"]
+    typer.echo(f"Relationships: {len(relationships)}")
+    for relationship in relationships:
+        other = relationship["node"]
+        direction = (
+            "depends on" if relationship["direction"] == "depends_on" else "used by"
+        )
+        typer.echo(
+            f"  {direction} {other['label']} [{other['id']}] "
+            f"via {relationship['kind']} ({relationship['weight']} site(s))"
+        )
+        for evidence in relationship["evidence"]:
+            typer.echo(f"    - {evidence['file']}:{evidence['line']}")
 
 
 if __name__ == "__main__":

@@ -7,9 +7,15 @@ import {
   useRef,
   useState,
 } from "react";
-import type { Edge, MapArtifact, Node as MapNode } from "./generated/map";
+import type {
+  Audit,
+  Edge,
+  MapArtifact,
+  Node as MapNode,
+} from "./generated/map";
 import type { ImpactArtifact } from "./generated/impact";
 import type { TraceArtifact } from "./generated/trace";
+import { auditLabel, findingsForNode } from "./audit";
 import { ImpactControls } from "./ImpactControls";
 import {
   type ChangeDisplayStatus,
@@ -430,6 +436,7 @@ export function App() {
   const mermaidUrl = `data:text/plain;charset=utf-8,${encodeURIComponent(
     toMermaid(visibleNodes, visibleEdges),
   )}`;
+  const mapAuditLabel = auditLabel(artifact?.audit);
 
   if (!artifact) {
     return (
@@ -466,6 +473,16 @@ export function App() {
           </div>
         </div>
         <div className="topbar-actions">
+          {mapAuditLabel && (
+            <span
+              className={`audit-badge ${
+                artifact.audit?.summary.warnings ? "has-warnings" : ""
+              }`}
+              title="Deterministic map-health findings embedded by the analyzer"
+            >
+              {mapAuditLabel}
+            </span>
+          )}
           <span className="node-count">{visibleNodes.length} nodes</span>
           <label className="secondary-button toggle" title="Reveal tests, fixtures, generated, and vendored files as dimmed non-source buckets">
             <input
@@ -547,6 +564,7 @@ export function App() {
           riskNodeIds={overlay.riskNodeIds}
         />
         <DetailPanel
+          audit={artifact.audit}
           sourceRoot={sourceRoot}
           index={index}
           node={selected}
@@ -1004,6 +1022,7 @@ function MapCanvas({
 }
 
 interface DetailPanelProps {
+  audit: Audit | undefined;
   sourceRoot: string;
   index: Map<string, MapNode>;
   node: MapNode | null;
@@ -1012,6 +1031,7 @@ interface DetailPanelProps {
 }
 
 function DetailPanel({
+  audit,
   sourceRoot,
   index,
   node,
@@ -1034,6 +1054,7 @@ function DetailPanel({
   const edges = artifactEdges.filter(
     (edge) => edge.source === node.id || edge.target === node.id,
   );
+  const auditFindings = findingsForNode(audit, node.id);
   return (
     <aside className="detail-panel">
       <button
@@ -1045,12 +1066,32 @@ function DetailPanel({
       </button>
       <p className="eyebrow">{node.kind.toUpperCase()}</p>
       <h2>{node.label}</h2>
+      <p className="node-provenance">
+        {node.role ?? "source"} · {node.prose_source} description
+      </p>
       <p className="summary">{node.summary || "No summary available."}</p>
       <div className="metrics">
         <Metric value={node.metrics.loc} label="LOC" />
         <Metric value={node.metrics.fan_in} label="FAN IN" />
         <Metric value={node.metrics.fan_out} label="FAN OUT" />
       </div>
+      {auditFindings.length > 0 && (
+        <DetailSection title={`Map audit · ${auditFindings.length}`}>
+          <ul className="audit-list">
+            {auditFindings.map((finding) => (
+              <li className={finding.severity} key={finding.id}>
+                <strong>{finding.code.replaceAll("-", " ")}</strong>
+                <span>{finding.message}</span>
+                <ul>
+                  {finding.evidence.map((evidence, indexInFinding) => (
+                    <li key={`${finding.id}-${indexInFinding}`}>{evidence}</li>
+                  ))}
+                </ul>
+              </li>
+            ))}
+          </ul>
+        </DetailSection>
+      )}
       <DetailSection title={`Files · ${files.length}`}>
         <ul className="source-list">
           {files.slice(0, 80).map((file) => (

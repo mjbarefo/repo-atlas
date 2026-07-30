@@ -125,6 +125,23 @@ Queries read `.atlas/map.json` by default; use `--map <path>` to select another
 artifact. Hotspot scores are calculated from artifact fan-in and local Git
 churn at query time, so repository history never changes the map artifact.
 
+Every newly analyzed map also carries a deterministic health audit. Review it
+from the CLI and explain any node down to its hierarchy, findings, neighboring
+nodes, and source-line evidence:
+
+```bash
+.venv/bin/atlas audit --map /path/to/repository/.atlas/map.json
+.venv/bin/atlas explain file:src/auth/session.py \
+  --map /path/to/repository/.atlas/map.json
+```
+
+Both commands accept `--format json` for automation. Audit findings are
+measured review prompts rather than opaque quality scores: ruleset 1 reports
+large files, large or suspiciously thin modules, and module dependency cycles.
+The viewer shows the embedded audit summary and attaches relevant findings to
+each node's detail panel. ATLAS's own baseline and validation instructions live
+in `docs/self-audit.md`.
+
 ## Optional LLM enrichment
 
 Enrichment is the only feature that needs a model provider, so its `litellm`
